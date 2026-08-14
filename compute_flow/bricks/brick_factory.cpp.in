@@ -1,0 +1,47 @@
+//
+// SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#include "compute_flow/bricks/brick_factory.h"
+
+#include <algorithm>
+#include <cctype>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+
+@COMPUTE_FLOW_BRICK_FACTORY_INCLUDES@
+namespace compute_flow::bricks {
+
+namespace {
+
+std::string normalize_token(std::string_view value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        if (ch == '-' || ch == ' ') {
+            out.push_back('_');
+            continue;
+        }
+        out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return out;
+}
+
+Brick make_brick_impl(const std::string& type, const std::string& name) {
+@COMPUTE_FLOW_BRICK_FACTORY_BRANCHES@
+    throw std::invalid_argument(
+        "Unsupported brick type/name: type='" + type + "', name='" + name + "'");
+}
+
+}  // namespace
+
+Brick load_brick(const BrickManifest& manifest) {
+    const BrickInfo& info = manifest.get_brick_info();
+    return make_brick_impl(normalize_token(info.type), info.name);
+}
+
+}  // namespace compute_flow::bricks

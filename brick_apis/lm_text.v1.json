@@ -1,0 +1,20 @@
+{
+    "name": "lm_text.v1",
+    "description": "Generates text from input text prompt with a language model.",
+    "inputs": {
+        "text_prompt": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "Input prompt."
+        }
+    },
+    "outputs": {
+        "text": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "Generated text."
+        }
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "name": "image_edit.v1",
+    "description": "Edits an input image using a text prompt.",
+    "inputs": {
+        "image": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_channels", "#input_height", "#input_width"],
+            "description": "RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue."
+        },
+        "prompt": {
+            "index": 1,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "Text prompt describing the requested edit."
+        }
+    },
+    "outputs": {
+        "image": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_channels", "#output_height", "#output_width"],
+            "description": "Edited RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue."
+        }
+    }
+}

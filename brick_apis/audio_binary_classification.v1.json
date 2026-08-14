@@ -1,0 +1,32 @@
+{
+    "name": "audio_binary_classification.v1",
+    "description": "Classifies whether a target condition is present in frames of a raw waveform.",
+    "inputs": {
+        "raw_wav": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_samples"],
+            "description": "Raw mono audio waveform."
+        },
+        "sample_rate": {
+            "index": 1,
+            "dtype": "int64",
+            "shape": [1],
+            "description": "Sample rate of the input waveform in Hz."
+        }
+    },
+    "outputs": {
+        "score": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_frames"],
+            "description": "Confidence score in [0, 1] that the positive condition is present in each frame."
+        },
+        "frame": {
+            "index": 1,
+            "dtype": "float32",
+            "shape": ["#num_frames", 2],
+            "description": "Temporal bounding frame in seconds for each classification frame (t, t_end)."
+        }
+    }
+}

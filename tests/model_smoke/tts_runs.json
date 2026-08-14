@@ -1,0 +1,12 @@
+[
+  {
+    "id": "short prompt",
+    "p": "Hello.",
+    "o": "short_prompt.wav"
+  },
+  {
+    "id": "long prompt",
+    "p": "Compute Flow helps developers combine reusable AI bricks into clear and portable applications. This longer prompt checks that text-to-speech generation remains stable beyond a short greeting.",
+    "o": "long_prompt.wav"
+  }
+]

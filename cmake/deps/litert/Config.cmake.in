@@ -1,0 +1,50 @@
+#
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads REQUIRED)
+
+set_and_check(LITERT_INCLUDEDIR "@PACKAGE_PACKAGE_INCLUDE_INSTALL_DIR@")
+set_and_check(LITERT_LIBDIR "@PACKAGE_PACKAGE_LIB_INSTALL_DIR@")
+set(LITERT_STATIC_GPU_SUPPORTED @COMPUTE_FLOW_LITERT_STATIC_GPU_SUPPORTED@)
+
+set(LITERT_STATIC_ARCHIVES @COMPUTE_FLOW_LITERT_COMPONENT_ARCHIVES@)
+foreach(_litert_archive IN LISTS LITERT_STATIC_ARCHIVES)
+    if(NOT EXISTS "${_litert_archive}")
+        message(FATAL_ERROR "LiteRT component archive does not exist: ${_litert_archive}")
+    endif()
+endforeach()
+
+if(NOT TARGET litert::litert)
+    add_library(litert::litert INTERFACE IMPORTED)
+    set(_litert_link_libraries "${LITERT_STATIC_ARCHIVES}")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+        list(JOIN LITERT_STATIC_ARCHIVES "," _litert_archive_group)
+        string(CONCAT _litert_link_libraries "$" "<LINK_GROUP:RESCAN," "${_litert_archive_group}" ">")
+    endif()
+    set_target_properties(
+        litert::litert
+        PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LITERT_INCLUDEDIR}"
+            INTERFACE_LINK_LIBRARIES "${_litert_link_libraries};Threads::Threads"
+    )
+
+    # Match LiteRT's static C API platform dependencies. Its macOS® runtime always builds the
+    # Metal® and OpenGL tensor-buffer implementations, even when no Metal® accelerator is packaged.
+    # The TensorFlow Lite GPU delegate loads OpenCL dynamically, so it is not a link dependency.
+    if(APPLE)
+        target_link_libraries(litert::litert INTERFACE "-framework Metal" "-framework Foundation" "-framework OpenGL")
+    elseif(ANDROID)
+        target_link_libraries(
+            litert::litert
+            INTERFACE android log EGL GLESv3 GLESv2
+        )
+    elseif(UNIX)
+        target_link_libraries(litert::litert INTERFACE "${CMAKE_DL_LIBS}" m)
+    endif()
+endif()

@@ -1,0 +1,20 @@
+{
+    "name": "monocular_depth_estimation.v1",
+    "description": "Estimates relative depth from an RGB image.",
+    "inputs": {
+        "image": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_channels", "#input_height", "#input_width"],
+            "description": "RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue."
+        }
+    },
+    "outputs": {
+        "relative_depth": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#input_height", "#input_width"],
+            "description": "Relative depth. Larger values represent points estimated to be nearer."
+        }
+    }
+}

@@ -1,0 +1,66 @@
+#
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+[project]
+name = "compute_flow"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pip>=26.0.1",
+    "rich>=14.3.3",
+]
+
+[project.scripts]
+compute-flow = "brick_manager.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "brick_manager.build_backend"
+backend-path = ["compute_flow/python"]
+
+[dependency-groups]
+build = [
+    "cmake>=3.24",
+    "conan==2.29.1",
+    "torch==2.9.1",  # torch and pyyaml are required by ExecuTorch
+    "pyyaml==6.0.3",
+]
+bricks = [
+    "numpy==2.4.3",
+    "soundfile==0.13.1",
+    "sounddevice==0.5.5",
+    "Pillow==12.1.1",
+]
+# TODO: Remove brick_scripts with the placeholder scripts in final production release
+brick-scripts = [
+    "onnx==1.20.1",
+    "requests==2.32.5",
+    "transformers==5.3.0",
+    "ai-edge-torch==0.7.2",
+    "einops==0.8.2",
+    "ultralytics==8.4.23",
+]
+formatters = [
+    "clang-format==22.1.2",
+    "gersemi==0.26.1",
+    "mdformat==1.0.0",
+    "mdformat-gfm==1.0.0",
+    "mdformat-frontmatter==2.0.10",
+    "ruff==0.15.7",
+]
+
+[tool.uv]
+default-groups = ["build", "bricks", "formatters"]
+reinstall-package = ["compute-flow"]
+
+[tool.setuptools]
+package-dir = {"" = "compute_flow/python"}
+
+[tool.setuptools.packages.find]
+where = ["compute_flow/python"]
+
+[tool.setuptools.package-data]
+brick_manager = ["completion/*.sh", "templates/*.in"]

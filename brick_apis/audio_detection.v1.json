@@ -1,0 +1,44 @@
+{
+    "name": "audio_detection.v1",
+    "description": "Detects and classifies audio events from a raw waveform.",
+    "inputs": {
+        "raw_wav": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_samples"],
+            "description": "Raw mono audio waveform."
+        },
+        "sample_rate": {
+            "index": 1,
+            "dtype": "int64",
+            "shape": [1],
+            "description": "Sample rate of the input waveform in Hz."
+        }
+    },
+    "outputs": {
+        "id": {
+            "index": 0,
+            "dtype": "int64",
+            "shape": ["#num_detected_events", "#num_classes_reported"],
+            "description": "Class IDs for each detected event, ordered by descending probability."
+        },
+        "score": {
+            "index": 1,
+            "dtype": "float32",
+            "shape": ["#num_detected_events", "#num_classes_reported"],
+            "description": "Confidence score for each class per detected event, ordered by descending probability."
+        },
+        "name": {
+            "index": 2,
+            "dtype": "uint8",
+            "shape": ["#num_detected_events", "#num_classes_reported", "#max_name_length"],
+            "description": "Class name encoded as UTF-8 bytes per detected event, ordered by descending probability."
+        },
+        "frame": {
+            "index": 3,
+            "dtype": "float32",
+            "shape": ["#num_detected_events", 2],
+            "description": "Temporal bounding frame in seconds for each detected event (t, t_end)."
+        }
+    }
+}

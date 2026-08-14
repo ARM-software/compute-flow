@@ -1,0 +1,16 @@
+#
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+[settings]
+os=Android
+os.api_level=21
+arch=armv8
+build_type=Release
+compiler=clang
+# Match NDK Clang major version from: `$NDK/toolchains/llvm/prebuilt/*/bin/clang --version`
+compiler.version=19
+compiler.cppstd=17
+compiler.libcxx=c++_shared

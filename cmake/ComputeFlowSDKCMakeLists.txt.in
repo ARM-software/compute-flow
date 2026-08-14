@@ -1,0 +1,69 @@
+#
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+cmake_minimum_required(VERSION 3.24)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(PROJ_NAME minimal_example)
+    project(${PROJ_NAME} LANGUAGES CXX)
+endif()
+
+file(GLOB COMPUTE_FLOW_SDK_LIBRARIES CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/lib/*")
+if(NOT COMPUTE_FLOW_SDK_LIBRARIES)
+    message(FATAL_ERROR "The Compute Flow SDK contains no libraries.")
+endif()
+
+add_library(compute_flow_sdk INTERFACE)
+target_include_directories(compute_flow_sdk INTERFACE "${CMAKE_CURRENT_LIST_DIR}/include")
+target_compile_features(compute_flow_sdk INTERFACE cxx_std_17)
+find_package(Threads REQUIRED)
+target_link_libraries(compute_flow_sdk INTERFACE Threads::Threads)
+
+set(compute_flow_sdk_regular_libraries ${COMPUTE_FLOW_SDK_LIBRARIES})
+set(compute_flow_sdk_force_load_libraries "")
+set(compute_flow_sdk_force_load_manifest "${CMAKE_CURRENT_LIST_DIR}/force_load_libraries.txt")
+if(EXISTS "${compute_flow_sdk_force_load_manifest}")
+    file(STRINGS "${compute_flow_sdk_force_load_manifest}" compute_flow_sdk_force_load_library_names)
+    foreach(library_name IN LISTS compute_flow_sdk_force_load_library_names)
+        set(library "${CMAKE_CURRENT_LIST_DIR}/lib/${library_name}")
+        if(NOT EXISTS "${library}")
+            message(FATAL_ERROR "The Compute Flow SDK force-load library does not exist: ${library}")
+        endif()
+        list(APPEND compute_flow_sdk_force_load_libraries "${library}")
+        list(REMOVE_ITEM compute_flow_sdk_regular_libraries "${library}")
+    endforeach()
+endif()
+
+if(compute_flow_sdk_force_load_libraries)
+    target_link_libraries(
+        compute_flow_sdk
+        INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${compute_flow_sdk_force_load_libraries}>"
+    )
+endif()
+
+if(UNIX AND NOT APPLE AND compute_flow_sdk_regular_libraries)
+    list(JOIN compute_flow_sdk_regular_libraries "," compute_flow_sdk_link_group)
+    target_link_libraries(compute_flow_sdk INTERFACE "$<LINK_GROUP:RESCAN,${compute_flow_sdk_link_group}>")
+    target_link_libraries(compute_flow_sdk INTERFACE ${CMAKE_DL_LIBS})
+else()
+    target_link_libraries(compute_flow_sdk INTERFACE ${compute_flow_sdk_regular_libraries})
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    target_link_libraries(compute_flow_sdk INTERFACE android log EGL GLESv3 GLESv2)
+endif()
+
+if(APPLE)
+    target_link_options(compute_flow_sdk INTERFACE "-framework" "Accelerate")
+    target_link_libraries(compute_flow_sdk INTERFACE "-framework Foundation" "-framework CoreFoundation")
+endif()
+
+add_library(compute_flow::sdk ALIAS compute_flow_sdk)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    add_executable(${PROJ_NAME} main.cpp)
+    target_link_libraries(${PROJ_NAME} PRIVATE compute_flow::sdk)
+endif()

@@ -1,0 +1,61 @@
+#
+# SPDX-FileCopyrightText: Copyright 2025-2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads REQUIRED)
+find_dependency(Protobuf CONFIG REQUIRED)
+
+set_and_check(SENTENCEPIECE_INCLUDEDIR "@PACKAGE_PACKAGE_INCLUDE_INSTALL_DIR@")
+set_and_check(SENTENCEPIECE_LIBDIR "@PACKAGE_PACKAGE_LIB_INSTALL_DIR@")
+
+# Prefer lite if present, else fall back to full.
+if(TARGET protobuf::libprotobuf-lite)
+    set(_spm_protobuf protobuf::libprotobuf-lite)
+elseif(TARGET protobuf::libprotobuf)
+    set(_spm_protobuf protobuf::libprotobuf)
+else()
+    message(FATAL_ERROR "sentencepiece shim: no protobuf::libprotobuf(-lite) target found")
+endif()
+
+set(_spm_core "${SENTENCEPIECE_LIBDIR}/libsentencepiece.a")
+set(_spm_train "${SENTENCEPIECE_LIBDIR}/libsentencepiece_train.a")
+
+if(NOT EXISTS "${_spm_core}")
+    message(FATAL_ERROR "sentencepiece shim: missing expected archive: ${_spm_core}")
+endif()
+
+add_library(sentencepiece-static STATIC IMPORTED)
+set_target_properties(
+    sentencepiece-static
+    PROPERTIES IMPORTED_LOCATION "${_spm_core}" INTERFACE_INCLUDE_DIRECTORIES "${SENTENCEPIECE_INCLUDEDIR}"
+)
+
+target_link_libraries(sentencepiece-static INTERFACE ${_spm_protobuf} Threads::Threads)
+
+# SentencePiece may require -latomic on some architectures/toolchains.
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    target_link_libraries(sentencepiece-static INTERFACE atomic)
+    # Protobuf's Android™ logging backend uses __android_log_write (liblog).
+    target_link_libraries(sentencepiece-static INTERFACE log)
+endif()
+
+# Optional train archive (not required by Compute Flow today but useful to export).
+if(EXISTS "${_spm_train}")
+    add_library(sentencepiece_train-static STATIC IMPORTED)
+    set_target_properties(
+        sentencepiece_train-static
+        PROPERTIES IMPORTED_LOCATION "${_spm_train}" INTERFACE_INCLUDE_DIRECTORIES "${SENTENCEPIECE_INCLUDEDIR}"
+    )
+    target_link_libraries(sentencepiece_train-static INTERFACE sentencepiece-static ${_spm_protobuf} Threads::Threads)
+endif()
+
+# Convenience namespace targets
+add_library(sentencepiece::sentencepiece ALIAS sentencepiece-static)
+if(TARGET sentencepiece_train-static)
+    add_library(sentencepiece::sentencepiece_train ALIAS sentencepiece_train-static)
+endif()

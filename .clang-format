@@ -1,0 +1,21 @@
+#
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+---
+Language: Cpp
+AccessModifierOffset: -4
+AlignConsecutiveAssignments: Consecutive
+BasedOnStyle: Google
+ColumnLimit: 120
+IndentWidth: 4
+
+---
+Language: Json
+BasedOnStyle: Google
+ColumnLimit: 120
+IndentWidth: 2
+
+...

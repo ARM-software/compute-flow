@@ -1,0 +1,26 @@
+{
+    "name": "stt.v1",
+    "description": "Converts speech to text.",
+    "inputs" : {
+        "raw_wav": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_samples"],
+            "description": "Raw mono audio waveform."
+        },
+        "sample_rate": {
+            "index": 1,
+            "dtype": "int64",
+            "shape": [1],
+            "description": "Sample rate of the input waveform in Hz."
+        }
+    },
+    "outputs" : {
+        "text": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "Output text encoded as UTF-8 bytes."
+        }
+    }
+}

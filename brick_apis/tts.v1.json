@@ -1,0 +1,32 @@
+{
+    "name": "tts.v1",
+    "description": "Converts text to speech.",
+    "inputs" : {
+        "text_prompt": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "Input text."
+        }
+    },
+    "outputs" : {
+        "left_channel": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_left_samples"],
+            "description": "Number of samples for the left channel."
+        },
+        "right_channel": {
+            "index": 1,
+            "dtype": "float32",
+            "shape": ["#num_right_samples"],
+            "description": "Number of samples for the right channel."
+        },
+        "sample_rate": {
+            "index": 2,
+            "dtype": "int64",
+            "shape": [1],
+            "description": "Output sample rate in Hz."
+        }
+    }
+}

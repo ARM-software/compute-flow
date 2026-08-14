@@ -1,0 +1,38 @@
+{
+    "name": "object_detection.v1",
+    "description": "Detects and classifies visual objects from an RGB image.",
+    "inputs" : {
+        "img": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_channels", "#img_height", "#img_width"],
+            "description": "RGB image in planar NCHW format. Channels are ordered as Red, Green, then Blue."
+        }
+    },
+    "outputs" : {
+        "id": {
+            "index": 0,
+            "dtype": "int64",
+            "shape": ["#num_detected_objects", "#num_classes_reported"],
+            "description": "Class name for each detected object, encoded as UTF-8 bytes."
+        },
+        "score": {
+            "index": 1,
+            "dtype": "float32",
+            "shape": ["#num_detected_objects", "#num_classes_reported"],
+            "description": "Confidence score for each detected object."
+        },
+        "name": {
+            "index": 2,
+            "dtype": "uint8",
+            "shape": ["#num_detected_objects", "#num_classes_reported", "#max_name_length"],
+            "description": "Class name for each detected object, encoded as UTF-8 bytes."
+        },
+        "box": {
+            "index": 3,
+            "dtype": "float32",
+            "shape": ["#num_detected_objects", 4],
+            "description": "Bounding boxes for each detected object (x, y, x_end, and y_end)."
+        }
+    }
+}
