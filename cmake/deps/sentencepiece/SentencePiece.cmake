@@ -24,11 +24,10 @@
 include_guard(GLOBAL)
 
 # ---- Source coordinates (change version/tag here) ----------------------------------------
-set(COMPUTE_FLOW_SENTENCEPIECE_VERSION "0.2.0")
 set(COMPUTE_FLOW_SENTENCEPIECE_GIT_REPO "https://github.com/google/sentencepiece.git")
-set(COMPUTE_FLOW_SENTENCEPIECE_GIT_TAG "v${COMPUTE_FLOW_SENTENCEPIECE_VERSION}")
+set(COMPUTE_FLOW_SENTENCEPIECE_GIT_TAG "17d7580d6407802f85855d2cc9190634e2c95624") # v0.2.0
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ---- Try pre-installed (release / system) --------------------------------------------------
 if(NOT COMPUTE_FLOW_BUILD_SENTENCEPIECE_FROM_SOURCE)
     find_package(sentencepiece CONFIG QUIET)
 

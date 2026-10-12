@@ -12,7 +12,7 @@
 #   litert::litert — LiteRT static C API and its dependency closure
 #
 # The source build uses FetchContent because LiteRT does not install a complete static C API
-# package. It stages a relocatable CMake package for Conan export by preserving the static archive
+# package. It stages a relocatable CMake package for release archives by preserving the static archive
 # closure and collecting the required public headers.
 #
 # Resolution: find_package → FetchContent (gated by from-source flag)
@@ -22,10 +22,9 @@ include_guard(GLOBAL)
 
 # ---- Source coordinates (change version/tag here) ----------------------------------------
 set(COMPUTE_FLOW_LITERT_VERSION "2.1.6")
-set(COMPUTE_FLOW_LITERT_URL
-    "https://github.com/google-ai-edge/LiteRT/archive/refs/tags/v${COMPUTE_FLOW_LITERT_VERSION}.tar.gz"
-)
-set(COMPUTE_FLOW_LITERT_URL_HASH "SHA256=f95fa96332c56b7103db7a02ab4edab845949c196a986db55bddaa70539ee45b")
+set(COMPUTE_FLOW_LITERT_GIT_TAG "1461b6b2def31713f5c71446eab844aae05d02e9") # v2.1.6
+set(COMPUTE_FLOW_LITERT_URL "https://github.com/google-ai-edge/LiteRT/archive/${COMPUTE_FLOW_LITERT_GIT_TAG}.tar.gz")
+set(COMPUTE_FLOW_LITERT_URL_HASH "SHA256=0149404918f197df947e95e71c668936498d6759d9b99e0eed80356a410c14ba")
 set(COMPUTE_FLOW_LITERT_TENSORFLOW_VERSION "2.21.0-rc0")
 set(COMPUTE_FLOW_LITERT_TENSORFLOW_URL
     "https://github.com/tensorflow/tensorflow/archive/refs/tags/v${COMPUTE_FLOW_LITERT_TENSORFLOW_VERSION}.tar.gz"
@@ -48,7 +47,7 @@ elseif(UNIX)
     list(APPEND COMPUTE_FLOW_LITERT_RUNTIME_LIBRARIES "${CMAKE_DL_LIBS}" m)
 endif()
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ---- Try pre-installed (release / system) --------------------------------------------------
 if(NOT COMPUTE_FLOW_BUILD_LITERT_FROM_SOURCE)
     find_package(litert ${COMPUTE_FLOW_LITERT_VERSION} CONFIG QUIET)
     if(litert_FOUND)
@@ -124,12 +123,13 @@ FetchContent_Declare(
     compute_flow_litert
     URL "${COMPUTE_FLOW_LITERT_URL}"
     URL_HASH "${COMPUTE_FLOW_LITERT_URL_HASH}"
-    PATCH_COMMAND
-        "${CMAKE_COMMAND}" -DLITERT_SOURCE_DIR:PATH=<SOURCE_DIR> -P "${CMAKE_CURRENT_LIST_DIR}/PatchLiteRT.cmake"
-        SOURCE_SUBDIR compute_flow_no_subdirectory
+    SOURCE_SUBDIR
+    compute_flow_no_subdirectory
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(compute_flow_litert)
+# LiteRT's independent tensor API is configured by upstream, but remains unbuilt because LiteRT is
+# excluded from the default build and the runtime does not link its tensor targets.
 add_subdirectory("${compute_flow_litert_SOURCE_DIR}/litert" "${compute_flow_litert_BINARY_DIR}" EXCLUDE_FROM_ALL)
 
 # LiteRT creates its OpenCL-dependent TensorFlow Lite GPU GL core target unconditionally on Android™.
@@ -255,7 +255,7 @@ _compute_flow_collect_litert_archives(
     litert_runtime_c_api_static "" "" COMPUTE_FLOW_LITERT_MONOLITHIC_ARCHIVES litert_archive_targets
 )
 
-# Stage a self-contained, relocatable package for Conan export. LiteRT does not currently install
+# Stage a self-contained, relocatable package for release archives. LiteRT does not currently install
 # its static C API and dependency closure. Preserve the component archives so Compute Flow can
 # deduplicate shared dependencies such as XNNPACK when assembling its monolithic archive.
 compute_flow_dep_install_dir(litert_install_dir "litert")
@@ -325,7 +325,6 @@ add_custom_command(
     DEPENDS
         ${litert_package_dependencies}
         "${CMAKE_CURRENT_LIST_DIR}/Config.cmake.in"
-        "${CMAKE_CURRENT_LIST_DIR}/PatchLiteRT.cmake"
         "${CMAKE_CURRENT_LIST_DIR}/StageLiteRT.cmake"
         "${litert_package_config_dir}/litertConfig.cmake"
         "${litert_package_config_dir}/litertConfigVersion.cmake"

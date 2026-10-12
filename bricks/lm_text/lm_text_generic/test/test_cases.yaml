@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+models:
+  hy-mt2-1-8b-2bit-translation:
+    hy_mt2_1_8b_manifest.json:
+      - args: ["-p", "Hello, world!", "-n", "16", "-t", "2"]

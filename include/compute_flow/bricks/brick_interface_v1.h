@@ -124,6 +124,10 @@ public:
      * @warning The input tensors must conform to the expected shapes and
      *          types defined by the manifest. Violations may lead to
      *          runtime errors or incorrect results.
+     * @warning Keep the input tensors valid and unmodified until
+     *          is_generation_complete() returns true.
+     * @warning Repeated calls for the same generation must provide the same
+     *          input values, but their storage addresses may change between calls.
      */
     virtual TensorDict run(const TensorDict& input) = 0;
 

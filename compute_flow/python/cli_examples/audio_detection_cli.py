@@ -8,7 +8,7 @@
 Python CLI for the audio detection brick.
 
 Usage:
-  python -m cli_examples.audio_detection_cli -m <manifest_path> (-a <mono_audio_path> | -j <runs.json>) [-t <thread_spec>] [-k <top_k>]
+  python -m cli_examples.audio_detection_cli -m <manifest_path> (-a <mono_audio_path> | -j <runs.json> | --record [--duration <seconds>]) [-t <thread_spec>] [-k <top_k>]
 """
 
 from __future__ import annotations
@@ -42,13 +42,46 @@ def load_as_wav(path: str) -> tuple[np.ndarray, np.ndarray]:
     return mono.astype(np.float32, copy=False), np.asarray([file_sr], dtype=np.int64)
 
 
+def record_audio(duration: float, sr: int = 16000) -> np.ndarray:
+    """Record float32 mono audio from the default microphone."""
+    if duration <= 0:
+        raise ValueError(f"Recording duration must be > 0 seconds (got {duration}).")
+
+    try:
+        import sounddevice as sd
+    except ImportError as error:
+        raise ImportError(
+            "sounddevice is required for recording audio. "
+            "Install it with `pip install sounddevice`."
+        ) from error
+
+    num_frames = int(duration * sr)
+
+    print(f"Recording {duration:.2f} seconds of audio at {sr} Hz...")
+    recording = sd.rec(
+        num_frames,
+        samplerate=sr,
+        channels=1,
+        dtype="float32",
+        blocking=False,
+    )
+    sd.wait()  # Wait until recording is finished
+    print("Recording complete.")
+
+    # The audio detection API expects shape (N).
+    return recording[:, 0].astype(np.float32, copy=False)
+
+
 def run_single(
     manifest_path: str,
-    audio_path: str,
+    audio_path: str | None,
     top_k: int,
     thread_spec: str,
     enable_op_profiling: bool,
+    record: bool,
+    duration: float,
 ) -> None:
+    """Run one audio detection request from a file or microphone recording."""
     # Parse the number of CPU threads to use
     default_threads, model_threads = parse_hint_cpu_threads(thread_spec)
 
@@ -73,10 +106,15 @@ def run_single(
 
     if top_k <= 0:
         raise ValueError("-k must be greater than 0")
-    resolved_audio_path = get_sample_path(audio_path, manifest_path)
 
-    # Read audio file
-    raw_wav, sample_rate = load_as_wav(resolved_audio_path)
+    if record:
+        raw_wav = record_audio(duration, sr=16000)
+        sample_rate = np.asarray([16000], dtype=np.int64)
+    else:
+        resolved_audio_path = get_sample_path(audio_path, manifest_path)
+
+        # Read audio file
+        raw_wav, sample_rate = load_as_wav(resolved_audio_path)
 
     # Set the input
     input = cf.TensorDict()
@@ -89,22 +127,19 @@ def run_single(
 
         scores = np.asarray(output["score"], dtype=np.float32)
         ids = np.asarray(output["id"], dtype=np.int64)
-        names = np.asarray(output["name"], dtype=np.uint8).reshape(
-            scores.shape[0], scores.shape[1], -1
-        )
+        names = np.asarray(output["name"], dtype=np.uint8)
         frame = np.asarray(output["frame"], dtype=np.float32).reshape(
             scores.shape[0], 2
         )
 
-        if top_k > scores.shape[1]:
-            raise ValueError("-k must be <= number of classes")
+        num_classes_to_display = min(top_k, scores.shape[1])
 
         for frame_idx in range(scores.shape[0]):
             time_s = float(frame[frame_idx, 0])
             time_e = float(frame[frame_idx, 1])
 
             print(f"Timestamp [{time_s:.3f}:{time_e:.3f}]s:")
-            for idx in range(top_k):
+            for idx in range(num_classes_to_display):
                 class_name = (
                     bytes(names[frame_idx, idx].tolist())
                     .split(b"\x00", 1)[0]
@@ -176,24 +211,19 @@ def run_multiple(
 
             scores = np.asarray(output["score"], dtype=np.float32)
             ids = np.asarray(output["id"], dtype=np.int64)
-            names = np.asarray(output["name"], dtype=np.uint8).reshape(
-                scores.shape[0], scores.shape[1], -1
-            )
+            names = np.asarray(output["name"], dtype=np.uint8)
             frame = np.asarray(output["frame"], dtype=np.float32).reshape(
                 scores.shape[0], 2
             )
 
-            if top_k > scores.shape[1]:
-                raise ValueError(
-                    f"Run {run_index + 1} argument 'k' must be <= number of classes"
-                )
+            num_classes_to_display = min(top_k, scores.shape[1])
 
             for frame_idx in range(scores.shape[0]):
                 time_s = float(frame[frame_idx, 0])
                 time_e = float(frame[frame_idx, 1])
 
                 print(f"Timestamp [{time_s:.3f}:{time_e:.3f}]s:")
-                for idx in range(top_k):
+                for idx in range(num_classes_to_display):
                     class_name = (
                         bytes(names[frame_idx, idx].tolist())
                         .split(b"\x00", 1)[0]
@@ -231,6 +261,18 @@ def main(argv=None) -> int:
         help="Run multiple entries without reloading the model",
     )
     parser.add_argument(
+        "--record",
+        action="store_true",
+        help="Record audio from default microphone instead of reading from a file",
+    )
+    parser.add_argument(
+        "--duration",
+        type=float,
+        default=10.0,
+        metavar="<seconds>",
+        help="Recording duration in seconds (used with --record, default: 10.0).",
+    )
+    parser.add_argument(
         "-t",
         dest="thread_spec",
         default="1",
@@ -241,7 +283,7 @@ def main(argv=None) -> int:
         dest="top_k",
         type=int,
         default=None,
-        help="Number of highest-probability classes to display",
+        help="Maximum number of classes to display (default: 3)",
     )
     parser.add_argument(
         "--enable-op-profiling",
@@ -252,10 +294,12 @@ def main(argv=None) -> int:
 
     # Check the mandatory arguments
     multiple_runs_mode = args.runs_file is not None
-    if (not multiple_runs_mode and args.audio_path is None) or (
-        multiple_runs_mode and (args.audio_path is not None or args.top_k is not None)
+    if multiple_runs_mode and (
+        args.audio_path is not None or args.record or args.top_k is not None
     ):
-        parser.error("use either -a [-k] or -j")
+        parser.error("use either direct run arguments or -j")
+    if not multiple_runs_mode and args.audio_path is None and not args.record:
+        parser.error("either an audio file or recording must be set")
 
     try:
         if multiple_runs_mode:
@@ -272,6 +316,8 @@ def main(argv=None) -> int:
                 args.top_k if args.top_k is not None else 3,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.record,
+                args.duration,
             )
     except ValueError as error:
         parser.error(str(error))

@@ -48,6 +48,14 @@ inline RunnerType runner_from_string(const std::string& s) {
 #endif
         return RunnerType::SentencePieceEncode;
     }
+    if (s == "sentencepiece_dec") {
+#ifndef COMPUTE_FLOW_HAS_SENTENCEPIECE
+        throw std::runtime_error(
+            "Manifest requests runner 'sentencepiece_dec', but SentencePiece support was disabled at build time. "
+            "Rebuild with -DCOMPUTE_FLOW_ENABLE_SENTENCEPIECE=ON.");
+#endif
+        return RunnerType::SentencePieceDecode;
+    }
     if (s == "hf_tokenizer") {
 #ifndef COMPUTE_FLOW_HAS_HF_TOKENIZER
         throw std::runtime_error(

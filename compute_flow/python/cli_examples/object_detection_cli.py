@@ -5,26 +5,25 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-"""
-Python CLI for the object detection brick — mirrors the C++ tool one-to-one.
+"""Run object detection on one image or a JSON file of image paths."""
 
-Usage:
-  python -m cli_examples.object_detection_cli -m <manifest_path> -i <image> [-t <thread_spec>]
-"""
+from __future__ import annotations
 
 import argparse
-import numpy as np
 import os
 import sys
 from typing import Iterable, Sequence
+
 import compute_flow_py as cf
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
 from cli_examples.internal.manifest_selector import get_manifest_path, get_sample_path
+from cli_examples.internal.run_config import get_run_value, load_run_configs
 from cli_examples.internal.thread_config import (
     parse_hint_cpu_threads,
     set_cpu_threads,
 )
-
-from PIL import Image, ImageDraw, ImageFont
 
 
 def image_to_npy(image_path: str, normalize: bool = True) -> np.ndarray:
@@ -203,51 +202,16 @@ def draw_detections_and_save(
     print(f"Saved annotated image to: {save_path}")
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Object detection brick CLI (Python version of the C++ tool)",
-        formatter_class=argparse.RawTextHelpFormatter,
-        add_help=False,
-    )
-
-    parser.add_argument(
-        "-m",
-        dest="manifest_path",
-        required=True,
-        help="Manifest path or @manifest/... selector",
-    )
-    parser.add_argument(
-        "-i",
-        dest="image",
-        required=True,
-        help="Input image path or @sample/... selector",
-    )
-    parser.add_argument(
-        "-t",
-        dest="thread_spec",
-        default="1",
-        help="Number of threads to use. Specify a default for all models and optionally override individual models, e.g. <default_num_threads>,<model_name0>:2,<model_name1>:4 (default: 1)",
-    )
-    parser.add_argument(
-        "--enable-op-profiling",
-        action="store_true",
-        help="Enable per-op profiling (default: off)",
-    )
-    parser.add_argument(
-        "-h", "--help", action="help", help="Show this help message and exit"
-    )
-
-    args = parser.parse_args(argv)
-
-    if not args.manifest_path or not args.image:
-        parser.print_help()
-        sys.exit("ERROR: Missing required arguments (-m, -i).")
-
+def run_single(
+    manifest_path: str,
+    image_value: str,
+    thread_spec: str,
+    enable_op_profiling: bool,
+) -> None:
+    """Run one object-detection request."""
     # Parse the number of CPU threads to use
-    default_threads, model_threads = parse_hint_cpu_threads(args.thread_spec)
-
-    manifest_path = get_manifest_path(args.manifest_path, "object_detection")
-    image_path = get_sample_path(args.image, manifest_path)
+    default_threads, model_threads = parse_hint_cpu_threads(thread_spec)
+    manifest_path = get_manifest_path(manifest_path, "object_detection")
 
     # Load the manifest
     manifest = cf.load_manifest(manifest_path)
@@ -261,17 +225,22 @@ def main(argv=None) -> int:
     # Initialize the brick
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
-    options.profiling.enable_op_profiling = args.enable_op_profiling
+    options.profiling.enable_op_profiling = enable_op_profiling
 
     # Setup the brick
     brick.setup(manifest, options)
 
-    input = cf.TensorDict()
+    brick.reset_states()
 
-    input["img"] = image_to_npy(image_path)
+    resolved_image_path = get_sample_path(image_value, manifest_path)
+
+    # Set the input
+    input_data = cf.TensorDict()
+    input_data["img"] = image_to_npy(resolved_image_path)
 
     # Run the model inference
-    output = brick.run(input)
+    while not brick.is_generation_complete():
+        output = brick.run(input_data)
 
     # Display profiler run
     print(brick.write_profile(), end="")
@@ -280,34 +249,167 @@ def main(argv=None) -> int:
     class_ids = output["id"]
     class_scores = output["score"]
     class_names = output["name"]
-
     for row in class_names:
         print("Detected:", decode_name_row(row))
 
-    # Generate an image with the bounding boxes
     try:
-        # Save into current working directory
-        input_filename = os.path.basename(image_path)
+        input_filename = os.path.basename(resolved_image_path)
         base, _ = os.path.splitext(input_filename)
-
-        out_image = os.path.join(os.getcwd(), f"{base}_detected.png")
-
+        output_image = os.path.join(os.getcwd(), f"{base}_detected.png")
         draw_detections_and_save(
-            image_path,
+            resolved_image_path,
             boxes=boxes,
             class_ids=class_ids,
             scores=class_scores,
             class_names_rows=class_names,
-            save_path=out_image,
+            save_path=output_image,
             score_fmt="{:.2f}",
             linewidth=6,
             font_size=20,
         )
-    except Exception as e:
-        print(f"Warning: failed to draw/save detections: {e}", file=sys.stderr)
+    except Exception as error:
+        print(
+            f"Warning: failed to draw/save detections: {error}",
+            file=sys.stderr,
+        )
+
+
+def run_multiple(
+    manifest_path: str,
+    runs_file: str,
+    thread_spec: str,
+    enable_op_profiling: bool,
+) -> None:
+    """Run object-detection requests from a JSON file."""
+    # Parse the number of CPU threads to use
+    default_threads, model_threads = parse_hint_cpu_threads(thread_spec)
+    manifest_path = get_manifest_path(manifest_path, "object_detection")
+
+    # Load the manifest
+    manifest = cf.load_manifest(manifest_path)
+
+    # Configure default and per-model CPU thread counts
+    set_cpu_threads(manifest, default_threads, model_threads)
+
+    # Load the brick
+    brick = cf.load_brick(manifest)
+
+    # Initialize the brick
+    options = cf.BrickOptions()
+    options.runtime.enable_warmup = True
+    options.profiling.enable_op_profiling = enable_op_profiling
+
+    # Setup the brick
+    brick.setup(manifest, options)
+
+    run_configs = load_run_configs(runs_file, {"i"}, {"i"})
+
+    for run_index, config in enumerate(run_configs):
+        brick.reset_states()
+
+        run_id = get_run_value(config, "id", str(run_index + 1), run_index)
+        print(f"Run {run_id}")
+        image_path = get_run_value(config, "i", "", run_index)
+        if not image_path:
+            raise ValueError(
+                f"Run {run_index + 1} argument 'i' must be a non-empty string"
+            )
+
+        # Set the input
+        input_data = cf.TensorDict()
+        input_data["img"] = image_to_npy(image_path)
+
+        # Run the model inference
+        while not brick.is_generation_complete():
+            output = brick.run(input_data)
+
+        # Display profiler run
+        print(brick.write_profile(), end="")
+
+        for row in output["name"]:
+            print("Detected:", decode_name_row(row))
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Parse the command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Object detection brick CLI (Python version of the C++ tool)",
+        usage=(
+            "%(prog)s -m <manifest_path> "
+            "(-i <image> | -j <runs.json>) [-t <thread_spec>]"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False,
+    )
+
+    parser.add_argument(
+        "-m",
+        dest="manifest_path",
+        required=True,
+        metavar="<manifest_path>",
+        help="Manifest path or @manifest/... selector.",
+    )
+    parser.add_argument(
+        "-i",
+        dest="image",
+        metavar="<image>",
+        help="Input image path or @sample/... selector.",
+    )
+    parser.add_argument(
+        "-j",
+        dest="runs_file",
+        metavar="<runs.json>",
+        help="Input JSON file path for multiple run settings.",
+    )
+    parser.add_argument(
+        "-t",
+        dest="thread_spec",
+        default="1",
+        metavar="<thread_spec>",
+        help=(
+            "Number of threads to use. Specify a default for all models and optionally "
+            "override individual models, e.g. "
+            "<default_num_threads>,<model_name0>:2,<model_name1>:4 (default: 1)."
+        ),
+    )
+    parser.add_argument(
+        "--enable-op-profiling",
+        action="store_true",
+        help="Enable per-op profiling (default: off)",
+    )
+    parser.add_argument(
+        "-h", "--help", action="help", help="Show this help message and exit"
+    )
+
+    args = parser.parse_args(argv)
+
+    # Check the mandatory arguments
+    multiple_runs_mode = args.runs_file is not None
+    if (not multiple_runs_mode and args.image is None) or (
+        multiple_runs_mode and args.image is not None
+    ):
+        parser.error("use either -i or -j")
+
+    try:
+        if multiple_runs_mode:
+            run_multiple(
+                args.manifest_path,
+                args.runs_file,
+                args.thread_spec,
+                args.enable_op_profiling,
+            )
+        else:
+            run_single(
+                args.manifest_path,
+                args.image,
+                args.thread_spec,
+                args.enable_op_profiling,
+            )
+    except ValueError as error:
+        parser.error(str(error))
 
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

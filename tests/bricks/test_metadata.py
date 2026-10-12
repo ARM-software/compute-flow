@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import copy
 import re
 import sys
 import unittest
@@ -18,7 +19,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY_ROOT / "compute_flow" / "python"))
 
 from brick_manager.cmake_generation import render_brick_cmake  # noqa: E402
-from brick_manager.metadata import load_info_json  # noqa: E402
+from brick_manager.errors import BrickManagerError  # noqa: E402
+from brick_manager.metadata import load_info_json, validate_info_json  # noqa: E402
 from brick_manager.registry import (  # noqa: E402
     parse_registry,
     resolve_local_source,
@@ -26,6 +28,37 @@ from brick_manager.registry import (  # noqa: E402
 
 
 class BrickMetadataTest(unittest.TestCase):
+    def test_local_model_source_may_omit_ref(self) -> None:
+        info = copy.deepcopy(
+            load_info_json(REPOSITORY_ROOT / "bricks" / "tts" / "qwen3_tts")
+        )
+        model = next(iter(info["models"].values()))
+        model["sources"] = [{"kind": "local", "url": "/models/example"}]
+
+        validate_info_json(info)
+
+    def test_remote_model_source_requires_ref(self) -> None:
+        info = copy.deepcopy(
+            load_info_json(REPOSITORY_ROOT / "bricks" / "tts" / "qwen3_tts")
+        )
+        model = next(iter(info["models"].values()))
+        model["sources"] = [
+            {"kind": "huggingface", "url": "https://huggingface.co/example/model"}
+        ]
+
+        with self.assertRaisesRegex(BrickManagerError, r"sources\[0\]\.ref"):
+            validate_info_json(info)
+
+    def test_model_entry_requires_sources(self) -> None:
+        info = copy.deepcopy(
+            load_info_json(REPOSITORY_ROOT / "bricks" / "tts" / "qwen3_tts")
+        )
+        model = next(iter(info["models"].values()))
+        del model["sources"]
+
+        with self.assertRaisesRegex(BrickManagerError, r"required field: .*\.sources"):
+            validate_info_json(info)
+
     def test_brick_metadata_and_layout(self) -> None:
         info_paths = sorted((REPOSITORY_ROOT / "bricks").glob("*/*/info.json"))
         self.assertTrue(info_paths, "No brick metadata files found")

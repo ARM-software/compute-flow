@@ -33,7 +33,7 @@ endif()
 set(COMPUTE_FLOW_ONNXRUNTIME_GIT_REPO "https://github.com/microsoft/onnxruntime.git")
 set(COMPUTE_FLOW_ONNXRUNTIME_GIT_TAG "e6e048e073fd9e787195d809a66904990d48b082")
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ---- Try pre-installed (release / system) --------------------------------------------------
 if(NOT COMPUTE_FLOW_BUILD_ONNXRUNTIME_FROM_SOURCE)
     find_package(onnxruntime CONFIG QUIET)
 

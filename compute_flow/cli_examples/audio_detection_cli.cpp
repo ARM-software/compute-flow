@@ -6,6 +6,7 @@
 
 #include <getopt.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -30,7 +31,7 @@ void print_usage(const char* exec) {
             "  -j <runs.json>            Input JSON file path for multiple run settings.\n"
             "  -t <thread_spec>          Default threads and optional per-model overrides, e.g. 2,classifier:4 "
             "(default: 1).\n"
-            "  -k <top_k>                Number of highest-probability classes to display (default: 3).\n"
+            "  -k <top_k>                Maximum number of classes to display (default: 3).\n"
             "  --enable-op-profiling     Enable per-op profiling output.\n"
             "  -h                        Show this help message and exit.\n",
             exec);
@@ -79,11 +80,11 @@ void run_single(std::string manifest_path, const std::string& audio_path, int64_
 
     while (!brick->is_generation_complete()) {
         // Run the model inference
-        TensorDict output            = brick->run(input);
-        const int64_t num_frames     = output["score"].format.shape[0];
-        const int64_t num_classes    = output["score"].format.shape[1];
-        const int64_t max_name_bytes = output["name"].format.shape[2];
-        COMPUTE_FLOW_CHECK(top_k <= num_classes);
+        TensorDict output                    = brick->run(input);
+        const int64_t num_frames             = output["score"].format.shape[0];
+        const int64_t num_classes            = output["score"].format.shape[1];
+        const int64_t max_name_bytes         = output["name"].format.shape[2];
+        const int64_t num_classes_to_display = std::min(top_k, num_classes);
 
         const float* scores  = reinterpret_cast<float*>(output["score"].data);
         const int64_t* ids   = reinterpret_cast<int64_t*>(output["id"].data);
@@ -98,7 +99,7 @@ void run_single(std::string manifest_path, const std::string& audio_path, int64_
 
             printf("Timestamp [%.3f:%.3f]s: \n", frame_bounds[0], frame_bounds[1]);
 
-            for (int64_t index = 0; index < top_k; ++index) {
+            for (int64_t index = 0; index < num_classes_to_display; ++index) {
                 const std::string class_name(reinterpret_cast<const char*>(frame_names) + index * max_name_bytes);
                 printf("    (%s (%lld), %f)\n", class_name.c_str(), static_cast<long long>(frame_ids[index]),
                        frame_scores[index]);
@@ -167,11 +168,11 @@ void run_multiple(std::string manifest_path, const std::string& runs_file, const
 
         while (!brick->is_generation_complete()) {
             // Run the model inference
-            TensorDict output            = brick->run(input);
-            const int64_t num_frames     = output["score"].format.shape[0];
-            const int64_t num_classes    = output["score"].format.shape[1];
-            const int64_t max_name_bytes = output["name"].format.shape[2];
-            COMPUTE_FLOW_CHECK(top_k <= num_classes);
+            TensorDict output                    = brick->run(input);
+            const int64_t num_frames             = output["score"].format.shape[0];
+            const int64_t num_classes            = output["score"].format.shape[1];
+            const int64_t max_name_bytes         = output["name"].format.shape[2];
+            const int64_t num_classes_to_display = std::min(top_k, num_classes);
 
             const float* scores  = reinterpret_cast<float*>(output["score"].data);
             const int64_t* ids   = reinterpret_cast<int64_t*>(output["id"].data);
@@ -186,7 +187,7 @@ void run_multiple(std::string manifest_path, const std::string& runs_file, const
 
                 printf("Timestamp [%.3f:%.3f]s: \n", frame_bounds[0], frame_bounds[1]);
 
-                for (int64_t index = 0; index < top_k; ++index) {
+                for (int64_t index = 0; index < num_classes_to_display; ++index) {
                     const std::string class_name(reinterpret_cast<const char*>(frame_names) + index * max_name_bytes);
                     printf("    (%s (%lld), %f)\n", class_name.c_str(), static_cast<long long>(frame_ids[index]),
                            frame_scores[index]);

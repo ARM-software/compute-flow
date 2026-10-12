@@ -8,16 +8,120 @@
 
 #include "runners/mnn/mnn_runner.h"
 
-#include "compute_flow/check.h"
+#define flatbuffers mnn_flatbuffers
+#include <MNN/schema/MNN_generated.h>
+#undef flatbuffers
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
 
+#include "compute_flow/check.h"
+
 namespace compute_flow {
 
 namespace {
+
+using MnnOpVector = mnn_flatbuffers::Vector<mnn_flatbuffers::Offset<MNN::Op>>;
+// MNNConvert encodes --fp16 convolution weights as IDSTQuan type 3.
+constexpr int32_t k_fp16_weight_type = 3;
+
+bool has_external_data(const mnn_flatbuffers::Vector<int64_t>* external) {
+    return external != nullptr && external->size() >= 2 && external->Get(1) > 0;
+}
+
+bool operation_has_fp16_weights(const MNN::Op& operation) {
+    switch (operation.type()) {
+        case MNN::OpType_Const: {
+            const MNN::Blob* const blob = operation.main_as_Blob();
+
+            if (blob == nullptr || blob->dataType() != MNN::DataType_DT_HALF) {
+                return false;
+            }
+
+            return (blob->uint8s() != nullptr && blob->uint8s()->size() > 0) || has_external_data(blob->external());
+        }
+        case MNN::OpType_Convolution:
+        case MNN::OpType_ConvolutionDepthwise:
+        case MNN::OpType_Deconvolution:
+        case MNN::OpType_DeconvolutionDepthwise: {
+            const MNN::Convolution2D* const convolution = operation.main_as_Convolution2D();
+
+            if (convolution == nullptr || convolution->quanParameter() == nullptr) {
+                return false;
+            }
+
+            const MNN::IDSTQuan& weights = *convolution->quanParameter();
+
+            if (weights.type() != k_fp16_weight_type) {
+                return false;
+            }
+
+            return (weights.buffer() != nullptr && weights.buffer()->size() > 0) ||
+                   has_external_data(convolution->external());
+        }
+        default:
+            return false;
+    }
+}
+
+bool operation_list_has_fp16_weights(const MnnOpVector* operations) {
+    if (operations == nullptr) {
+        return false;
+    }
+
+    for (uint32_t index = 0; index < operations->size(); ++index) {
+        const MNN::Op* const operation = operations->Get(index);
+
+        if (operation == nullptr) {
+            continue;
+        }
+
+        if (operation_has_fp16_weights(*operation)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool model_has_fp16_weights(const void* model_buffer, size_t model_size) {
+    if (model_buffer == nullptr || model_size == 0) {
+        return false;
+    }
+
+    mnn_flatbuffers::Verifier verifier(static_cast<const uint8_t*>(model_buffer), model_size);
+
+    if (!MNN::VerifyNetBuffer(verifier)) {
+        return false;
+    }
+
+    const MNN::Net* const model = MNN::GetNet(model_buffer);
+
+    if (model == nullptr) {
+        return false;
+    }
+
+    if (operation_list_has_fp16_weights(model->oplists())) {
+        return true;
+    }
+
+    if (model->subgraphs() == nullptr) {
+        return false;
+    }
+
+    for (uint32_t index = 0; index < model->subgraphs()->size(); ++index) {
+        const MNN::SubGraphProto* const subgraph = model->subgraphs()->Get(index);
+
+        if (subgraph != nullptr && operation_list_has_fp16_weights(subgraph->nodes())) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 bool tensor_layout_matches(const MNN::Tensor& lhs, const MNN::Tensor& rhs) {
     return lhs.getType() == rhs.getType() && lhs.getDimensionType() == rhs.getDimensionType() &&
@@ -36,6 +140,7 @@ void MNNRunner::setup(const ModelData& model, ProfilerView profiler) {
     backend_config.memory = MNN::BackendConfig::Memory_Low;
     config.backendConfig = &backend_config;
     const AcceleratorPreference& accelerator = model.acc_config.priorities.front();
+    bool force_fp16                          = false;
 
     switch (accelerator.type) {
         case AcceleratorType::Cpu: {
@@ -46,6 +151,7 @@ void MNNRunner::setup(const ModelData& model, ProfilerView profiler) {
             }
 
             config.type = MNN_FORWARD_CPU;
+            force_fp16 = cpu_options.enable_fp16;
 
             if (cpu_options.num_threads > 0) {
                 config.numThread = static_cast<int32_t>(cpu_options.num_threads);
@@ -80,6 +186,11 @@ void MNNRunner::setup(const ModelData& model, ProfilerView profiler) {
 
     auto interpreter = std::unique_ptr<MNN::Interpreter>(MNN::Interpreter::createFromFile(model.model_path.c_str()));
     COMPUTE_FLOW_CHECK(interpreter != nullptr);
+
+    const auto [model_buffer, model_size] = interpreter->getModelBuffer();
+    const bool enable_fp16 = force_fp16 || model_has_fp16_weights(model_buffer, model_size);
+    backend_config.precision = enable_fp16 ? MNN::BackendConfig::Precision_Low : MNN::BackendConfig::Precision_Normal;
+
     interpreter->setSessionHint(MNN::Interpreter::HintMode::CPU_ENABLE_KLEIDIAI, true);
 
     MNN::Session* const session = interpreter->createSession(config);
@@ -207,7 +318,9 @@ void MNNRunner::set_input(const std::string& key, const TensorData& tensor) {
 
 TensorData MNNRunner::get_output(const std::string& key) {
     const size_t index = output_index(key);
-    if (!_has_run) throw std::logic_error("MNN output requested before running the model");
+    if (!_has_run) {
+        throw std::logic_error("MNN output requested before running the model");
+    }
 
     TensorData& output = _outputs[index];
     output.data = _host_outputs[index]->host<void>();
@@ -263,20 +376,40 @@ DataType MNNRunner::to_compute_flow_type(halide_type_t type) {
         throw std::invalid_argument("MNN vector tensor types are unsupported");
     }
     if (type.code == halide_type_float) {
-        if (type.bits == 16) return DataType::F16;
-        if (type.bits == 32) return DataType::F32;
-        if (type.bits == 64) return DataType::F64;
+        if (type.bits == 16) {
+            return DataType::F16;
+        }
+        if (type.bits == 32) {
+            return DataType::F32;
+        }
+        if (type.bits == 64) {
+            return DataType::F64;
+        }
     } else if (type.code == halide_type_bfloat && type.bits == 16) {
         return DataType::BF16;
     } else if (type.code == halide_type_int) {
-        if (type.bits == 8) return DataType::I8;
-        if (type.bits == 32) return DataType::I32;
-        if (type.bits == 64) return DataType::I64;
+        if (type.bits == 8) {
+            return DataType::I8;
+        }
+        if (type.bits == 32) {
+            return DataType::I32;
+        }
+        if (type.bits == 64) {
+            return DataType::I64;
+        }
     } else if (type.code == halide_type_uint) {
-        if (type.bits == 1) return DataType::Bool;
-        if (type.bits == 8) return DataType::U8;
-        if (type.bits == 32) return DataType::U32;
-        if (type.bits == 64) return DataType::U64;
+        if (type.bits == 1) {
+            return DataType::Bool;
+        }
+        if (type.bits == 8) {
+            return DataType::U8;
+        }
+        if (type.bits == 32) {
+            return DataType::U32;
+        }
+        if (type.bits == 64) {
+            return DataType::U64;
+        }
     }
     throw std::invalid_argument(
         "Unsupported MNN tensor type: code=" + std::to_string(type.code) +
@@ -363,7 +496,9 @@ void MNNRunner::copy_input_to_device(size_t index) {
 
 void MNNRunner::copy_initialized_inputs_to_device() {
     for (size_t index = 0; index < _input_initialized.size(); ++index) {
-        if (_input_initialized[index]) copy_input_to_device(index);
+        if (_input_initialized[index]) {
+            copy_input_to_device(index);
+        }
     }
 }
 
@@ -388,7 +523,9 @@ void MNNRunner::resize_input(size_t index, const TensorFormat& format) {
     }
     _host_inputs[index].reset();
     _input_initialized[index] = false;
-    for (auto& output : _host_outputs) output.reset();
+    for (auto& output : _host_outputs) {
+        output.reset();
+    }
     _has_run = false;
 }
 

@@ -24,13 +24,6 @@ class BrickDependency:
 
 
 _DEPENDENCIES = {
-    "espeakng": BrickDependency(
-        cmake_target="espeak-ng",
-        cmake_package="espeakng",
-        cmake_module="cmake/deps/espeakng/EspeakNg.cmake",
-        cmake_source_variable="espeakng_SOURCE_DIR",
-        extra_include_subdirs=("src/ucd-tools/src/include",),
-    ),
     "libnpy": BrickDependency(
         cmake_target="libnpy::libnpy",
         cmake_package="libnpy",

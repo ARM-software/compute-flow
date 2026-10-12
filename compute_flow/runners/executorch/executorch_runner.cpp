@@ -309,9 +309,12 @@ void ExecuTorchRunner::initialize_cpu_delegate(const CpuOptions& cpu_options) {
 inline DataType ExecuTorchRunner::convert_et_dt_to_internal_dt(executorch::aten::ScalarType t) {
     switch (t) {
         case executorch::aten::ScalarType::Float: return DataType::F32;
+        case executorch::aten::ScalarType::Bool: return DataType::Bool;
         case executorch::aten::ScalarType::Half: return DataType::F16;
         case executorch::aten::ScalarType::QInt8: return DataType::I8;
         case executorch::aten::ScalarType::QUInt8: return DataType::U8;
+        case executorch::aten::ScalarType::Int: return DataType::I32;
+        case executorch::aten::ScalarType::UInt32: return DataType::U32;
         case executorch::aten::ScalarType::UInt64: return DataType::U64;
         case executorch::aten::ScalarType::Long:   return DataType::I64;
         default:
@@ -322,9 +325,12 @@ inline DataType ExecuTorchRunner::convert_et_dt_to_internal_dt(executorch::aten:
 inline executorch::aten::ScalarType ExecuTorchRunner::convert_internal_dt_to_et_dt(DataType t) {
     switch (t) {
         case DataType::F32: return executorch::aten::ScalarType::Float;
+        case DataType::Bool: return executorch::aten::ScalarType::Bool;
         case DataType::F16: return executorch::aten::ScalarType::Half;
         case DataType::I8:  return executorch::aten::ScalarType::QInt8;
         case DataType::U8:  return executorch::aten::ScalarType::QUInt8;
+        case DataType::I32: return executorch::aten::ScalarType::Int;
+        case DataType::U32: return executorch::aten::ScalarType::UInt32;
         case DataType::U64: return executorch::aten::ScalarType::UInt64;
         case DataType::I64: return executorch::aten::ScalarType::Long;
         default:

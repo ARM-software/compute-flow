@@ -17,7 +17,7 @@ set(COMPUTE_FLOW_NLOHMANN_JSON_URL
 )
 set(COMPUTE_FLOW_NLOHMANN_JSON_URL_HASH "SHA256=67f4cdd9ca930c9c1e130af4a437c7fc98fab77a2846fc2d2a14b4943831f8ef")
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ---- Try pre-installed (release / system) --------------------------------------------------
 find_package(nlohmann_json ${COMPUTE_FLOW_NLOHMANN_JSON_VERSION} CONFIG QUIET)
 if(nlohmann_json_FOUND)
     message(STATUS "nlohmann_json: found pre-installed")

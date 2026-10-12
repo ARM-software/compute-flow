@@ -9,7 +9,9 @@ name = "compute_flow"
 version = "1.0.0"
 requires-python = ">=3.11"
 dependencies = [
+    "huggingface-hub>=1.7.1",
     "pip>=26.0.1",
+    "pyyaml==6.0.3",
     "rich>=14.3.3",
 ]
 
@@ -24,9 +26,7 @@ backend-path = ["compute_flow/python"]
 [dependency-groups]
 build = [
     "cmake>=3.24",
-    "conan==2.29.1",
-    "torch==2.9.1",  # torch and pyyaml are required by ExecuTorch
-    "pyyaml==6.0.3",
+    "torch==2.14.0",  # torch is required by ExecuTorch
 ]
 bricks = [
     "numpy==2.4.3",
@@ -55,6 +55,21 @@ formatters = [
 [tool.uv]
 default-groups = ["build", "bricks", "formatters"]
 reinstall-package = ["compute-flow"]
+# ExecuTorch 1.5.0 requires torch 2.14, while the LiteRT conversion tools require an older torch.
+conflicts = [
+    [
+        { group = "build" },
+        { group = "brick-scripts" },
+    ],
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.setuptools]
 package-dir = {"" = "compute_flow/python"}

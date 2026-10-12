@@ -33,8 +33,6 @@ option(COMPUTE_FLOW_ENABLE_MNN_GPU "Enable MNN GPU acceleration on Android™" $
 option(COMPUTE_FLOW_ENABLE_SENTENCEPIECE "Enable SentencePiece tokenizer runner" ON)
 option(COMPUTE_FLOW_ENABLE_HF_TOKENIZER "Enable Hugging Face tokenizer runner" ON)
 option(COMPUTE_FLOW_ENABLE_LLAMACPP "Enable llama.cpp LM runner" ON)
-option(COMPUTE_FLOW_ENABLE_MODEL_TESTS "Install models and enable model-backed CLI smoke tests" OFF)
-set(COMPUTE_FLOW_TEST_MODEL_HOME "" CACHE PATH "Compute Flow home containing models used by tests")
 option(COMPUTE_FLOW_ENABLE_STREAMLINE "Enable Arm® Streamline timeline annotations" OFF)
 if(ANDROID)
     set(COMPUTE_FLOW_STREAMLINE_USE_TCP_DEFAULT ON)
@@ -46,7 +44,7 @@ option(
     "Use TCP instead of Unix-domain sockets for Arm® Streamline annotations"
     ${COMPUTE_FLOW_STREAMLINE_USE_TCP_DEFAULT}
 )
-option(COMPUTE_FLOW_USE_CONAN "Fetch deps via Conan package manager" ON)
+option(COMPUTE_FLOW_USE_PREBUILT_DEPS "Fetch prebuilt dependency release archives" ON)
 # Per-dependency from-source overrides (force-build from source even if find_package succeeds)
 option(COMPUTE_FLOW_BUILD_PROTOBUF_FROM_SOURCE "Force-build Protobuf from source" OFF)
 option(COMPUTE_FLOW_BUILD_LITERT_FROM_SOURCE "Force-build LiteRT from source" OFF)
@@ -73,6 +71,15 @@ endif()
 
 # Keep this enabled as we're linking static deps into shared libs (e.g. pybind module)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+if(ANDROID)
+    set(ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES ON CACHE BOOL "" FORCE)
+    # The toolchain has already run in project(), so apply these flags on the first configure too.
+    add_compile_definitions(__BIONIC_NO_PAGE_SIZE_MACRO)
+    foreach(linker_flags IN ITEMS CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
+        string(APPEND ${linker_flags} " -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")
+    endforeach()
+endif()
 
 include(ExternalProject)
 include(FetchContent)
@@ -139,10 +146,11 @@ message(STATUS "--------------------------------")
 # Python
 # =========================================================================================
 
+# Match the supported Python version in pyproject.toml for build-time Brick Manager code.
 if(COMPUTE_FLOW_PYBIND_ENABLED)
-    find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+    find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
 else()
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 endif()
 
 # =========================================================================================
@@ -471,6 +479,7 @@ endif()
 
 if(COMPUTE_FLOW_ENABLE_SENTENCEPIECE)
     list(APPEND COMPUTE_FLOW_CORE_SOURCES compute_flow/runners/sentencepiece_encode/sentencepiece_encode_runner.cpp)
+    list(APPEND COMPUTE_FLOW_CORE_SOURCES compute_flow/runners/sentencepiece_decode/sentencepiece_decode_runner.cpp)
 endif()
 
 if(COMPUTE_FLOW_ENABLE_HF_TOKENIZER)
@@ -999,6 +1008,8 @@ add_custom_target(
     compute_flow_application_sdk
     COMMAND
         "${CMAKE_COMMAND}" "-DCOMPUTE_FLOW_INCLUDE_DIR=${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}"
+        "-DCOMPUTE_FLOW_INSTALLED_BRICK_IDENTITIES=${COMPUTE_FLOW_INSTALLED_BRICK_IDENTITIES}"
+        "-DCOMPUTE_FLOW_INSTALLED_BRICK_SOURCE_DIRS=${COMPUTE_FLOW_INSTALLED_BRICK_SOURCE_DIRS}"
         "-DCOMPUTE_FLOW_LIBRARY_MANIFEST=${CMAKE_BINARY_DIR}/compute_flow_sdk_libraries-$<CONFIG>.txt"
         "-DCOMPUTE_FLOW_FORCE_LOAD_LIBRARY_MANIFEST=${CMAKE_BINARY_DIR}/compute_flow_sdk_force_load_libraries-$<CONFIG>.txt"
         "-DCOMPUTE_FLOW_SDK_DIR=${CMAKE_BINARY_DIR}/sdk" -P "${CMAKE_SOURCE_DIR}/cmake/PrepareComputeFlowSDK.cmake"
@@ -1066,6 +1077,7 @@ compute_flow_link_installed_bricks(image_edit_cli)
 add_executable(
     monocular_depth_estimation_cli
     "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/monocular_depth_estimation_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
@@ -1073,22 +1085,37 @@ target_link_libraries(monocular_depth_estimation_cli PRIVATE stb::stb)
 compute_flow_link_installed_bricks(monocular_depth_estimation_cli)
 
 add_executable(
+    image_segmentation_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_segmentation_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
+    ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
+    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
+)
+target_link_libraries(image_segmentation_cli PRIVATE stb::stb)
+compute_flow_link_installed_bricks(image_segmentation_cli)
+
+add_executable(
+    image_classification_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_classification_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
+    ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
+    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
+)
+target_link_libraries(image_classification_cli PRIVATE stb::stb)
+compute_flow_link_installed_bricks(image_classification_cli)
+
+add_executable(
     lm_text_cli
     "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/lm_text_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
 compute_flow_link_installed_bricks(lm_text_cli)
 
 add_executable(
-    musicgen_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/musicgen_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(musicgen_cli)
-
-add_executable(
     stt_cli
     "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/stt_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
 compute_flow_link_installed_bricks(stt_cli)
@@ -1104,21 +1131,23 @@ compute_flow_link_installed_bricks(tts_cli)
 add_executable(
     vad_cli
     "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/vad_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
 compute_flow_link_installed_bricks(vad_cli)
 
 add_executable(
-    neural_codec_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/neural_codec_cli.cpp"
+    audio_embedding_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_embedding_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
-target_link_libraries(neural_codec_cli PRIVATE libnpy::libnpy)
-compute_flow_link_installed_bricks(neural_codec_cli)
+compute_flow_link_installed_bricks(audio_embedding_cli)
 
 add_executable(
     object_detection_cli
     "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/object_detection_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )

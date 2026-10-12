@@ -1,0 +1,123 @@
+{
+  "name": "PocketTTS",
+  "type": "tts",
+  "api": "tts.v1",
+  "description": "Multi-model streaming text-to-speech with SentencePiece tokenizer and Mimi codec decoder.",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "deps": [
+    "libnpy"
+  ],
+  "models": {
+    "pocket-tts-de": {
+      "description": "Pocket-TTS: German",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-de-mix-precision",
+          "ref": "8b11b33ad111fa2dc2370728c0d01d5f355d7298"
+        }
+      ],
+      "sha256": "224469e0cabc0f6cb93542eff71571650e5d05feafaa5951e762b18a86b21051"
+    },
+    "pocket-tts-de-24l": {
+      "description": "Pocket-TTS Large (high quality): German",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-de-24l-mix-precision",
+          "ref": "7f379707922b19a34ed089bbd0f6084257c20153"
+        }
+      ],
+      "sha256": "97af13f12b3d3f47d5d484710fbd53955ab80be286339e313210fed938846c17"
+    },
+    "pocket-tts-en": {
+      "description": "Pocket-TTS: English",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-en-mix-precision",
+          "ref": "5fc4026257458cb3ceafeec602fbd880217b8e17"
+        }
+      ],
+      "sha256": "4b5def80b2d9594d44148002240b28e0bd7ffb946be0eee7be0f84465a6a5fd8"
+    },
+    "pocket-tts-es": {
+      "description": "Pocket-TTS: Spanish",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-es-mix-precision",
+          "ref": "59bfa98ddb810ace4cabe99f9d93950713003be7"
+        }
+      ],
+      "sha256": "91e23d93f03e6817ddad30b4aaf4c96c8b9528b54a91848e5fa894c1c73ce9ad"
+    },
+    "pocket-tts-es-24l": {
+      "description": "Pocket-TTS Large (high quality): Spanish",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-es-24l-mix-precision",
+          "ref": "01b00b54507d0c6969db59371b42b99fdbd22933"
+        }
+      ],
+      "sha256": "da152adde0315b005d4680e688368eac34d3e6134efe935122392414e459dfda"
+    },
+    "pocket-tts-fr-24l": {
+      "description": "Pocket-TTS Large (high quality): French",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-fr-24l-mix-precision",
+          "ref": "171fc3aec656415efa76fada066b5975a36bb7a3"
+        }
+      ],
+      "sha256": "48ed21fb1ef64ca8bc5b96b5a1edb244526e5731bf573f91dd48b1d433dc2169"
+    },
+    "pocket-tts-it": {
+      "description": "Pocket-TTS: Italian",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-it-mix-precision",
+          "ref": "136ea281826941d2c6ee2ad5e7e704e2f3b55684"
+        }
+      ],
+      "sha256": "c82ea1b6092ff1122bf32aef6c85f62750b582b05842fb8535b0a1b83e9d6802"
+    },
+    "pocket-tts-it-24l": {
+      "description": "Pocket-TTS Large (high quality): Italian",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-it-24l-mix-precision",
+          "ref": "eb23136770fd28d79ebc93fa6bdfefa82e7851a2"
+        }
+      ],
+      "sha256": "c18e6fd9dd5479839ae46486104c4dee8b1028710957c63c6b02a00043f8fc58"
+    },
+    "pocket-tts-pt": {
+      "description": "Pocket-TTS: Portuguese",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-pt-mix-precision",
+          "ref": "1c972c54749af96cc4c81857fd4a94d97725a69d"
+        }
+      ],
+      "sha256": "be5937aa4b9f7a2f1758a716a1049a9489a27315385746993f93122ea2f2aabc"
+    },
+    "pocket-tts-pt-24l": {
+      "description": "Pocket-TTS Large (high quality): Portuguese",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/pocket-tts-pt-24l-mix-precision",
+          "ref": "2dbe5087e96cb46240067826c81625df8a4954d3"
+        }
+      ],
+      "sha256": "c53b7d4b4e13f455afe491957241fab90792eba9715e576118d6f297bc98240a"
+    }
+  }
+}

@@ -91,25 +91,8 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 
-### Conan
+# Keep the previous local package cache out of source control.
 .conan2/
-
-# Conan-generated environment scripts (created by `conan install`/`conan test`)
-conanbuild*.sh
-conanrun*.sh
-deactivate_conan*.sh
-
-# Conan 2 metadata folder
-metadata/
-
-# Generated under test_package when running `conan test`
-**/test_package/conan_toolchain.cmake
-**/test_package/CMakePresets.json
-**/test_package/CMakeUserPresets.json
-**/test_package/conanbuild*.sh
-**/test_package/conanrun*.sh
-**/test_package/deactivate_conan*.sh
-**/test_package/__pycache__/
 
 ### Build directory
 cmake-build-*/
@@ -153,6 +136,7 @@ cython_debug/
 
 ### Large artifacts
 *.tar.gz
+/releases/artifacts/
 *.wav
 
 ### AI models

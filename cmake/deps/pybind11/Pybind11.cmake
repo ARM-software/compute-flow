@@ -21,7 +21,7 @@ set(COMPUTE_FLOW_PYBIND11_VERSION "2.12.0")
 set(COMPUTE_FLOW_PYBIND11_GIT_REPO "https://github.com/pybind/pybind11.git")
 set(COMPUTE_FLOW_PYBIND11_GIT_TAG "v${COMPUTE_FLOW_PYBIND11_VERSION}")
 
-# ---- Try pre-installed (Conan / system / pip) --------------------------------------------
+# ---- Try pre-installed (release / system / pip) --------------------------------------------
 find_package(pybind11 ${COMPUTE_FLOW_PYBIND11_VERSION} CONFIG QUIET)
 if(pybind11_FOUND)
     message(STATUS "pybind11: found pre-installed (${pybind11_VERSION})")

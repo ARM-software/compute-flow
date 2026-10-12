@@ -24,6 +24,10 @@ class StatePaths:
         return self.home / "cache.json"
 
     @property
+    def registry(self) -> Path:
+        return self.home / "registry.txt"
+
+    @property
     def bricks(self) -> Path:
         return self.home / "bricks"
 

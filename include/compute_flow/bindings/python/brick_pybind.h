@@ -195,6 +195,10 @@ public:
         static_cast<bricks::IBrickV1&>(impl_).setup(manifest, options);
     }
 
+    void update_config(const ComputeFlowManifest& manifest) {
+        static_cast<bricks::IBrickV1&>(impl_).update_config(manifest);
+    }
+
     py::object run(py::object input) {
         PyKeepAlive keep;
         TensorDict in_td;
@@ -248,6 +252,8 @@ py::class_<PyBrick<BrickT>> bind_brick(py::module_& m, const char* class_name) {
             &PyBrickT::setup,
             py::arg("manifest"),
             py::arg_v("options", bricks::BrickOptions{}, "BrickOptions()"))
+        .def("update_config", &PyBrickT::update_config, py::arg("manifest"),
+             "Apply manifest configs without reloading models; reset states before the next request.")
         .def("run", &PyBrickT::run, py::arg("input"))
         .def("is_generation_complete", &PyBrickT::is_generation_complete)
         .def("is_output_ready", &PyBrickT::is_output_ready)

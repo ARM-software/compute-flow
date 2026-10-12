@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -30,10 +30,16 @@ from brick_manager.catalog import (
 from brick_manager.build import BuildResult
 from brick_manager.check import CheckResult
 from brick_manager.install import InstallAllResult, InstallResult
+from brick_manager.model_import import ModelImportResult
 from brick_manager.model_install import ModelInstallResult, ModelUninstallResult
 from brick_manager.paths import StatePaths
+from brick_manager.registry_commands import (
+    RegistryAddResult,
+    RegistryRemoveResult,
+    RegistrySource,
+)
 from brick_manager.uninstall import UninstallAllResult, UninstallResult
-from brick_manager.update import UpdateResult
+from brick_manager.update import BrickUpdate, UpdateResult
 
 
 THEME = Theme(
@@ -62,20 +68,96 @@ def render_overview(state_paths: StatePaths, console: Console = CONSOLE) -> None
 
 
 def render_update_result(result: UpdateResult, console: Console = CONSOLE) -> None:
+    registry_rows = [("Registry", _path(result.registry_path))]
+    if result.user_registry_path is not None:
+        registry_rows.append(("User registry", _path(result.user_registry_path)))
+    registry_rows.extend(
+        (
+            ("Cache", _path(result.cache_path)),
+            ("Indexed versions", str(result.brick_versions)),
+        )
+    )
     console.print(
         _summary_panel(
             "OK",
             "Cache Updated",
+            _kv_table(registry_rows),
+            status_style="success",
+        )
+    )
+    if result.available_updates:
+        console.print(
+            _summary_panel(
+                "WARN",
+                "Installed Brick Updates Available",
+                Group(
+                    Text(
+                        "Updating is recommended to keep brick sources and model "
+                        "declarations aligned.",
+                        style="warning",
+                    ),
+                    Rule("Updates", style="dim"),
+                    _brick_update_table(result.available_updates),
+                ),
+                status_style="warning",
+            )
+        )
+
+
+def render_registry_add_result(
+    result: RegistryAddResult, console: Console = CONSOLE
+) -> None:
+    if result.status == "already_registered":
+        console.print(f"Already registered: {result.source}")
+        return
+    console.print(
+        _summary_panel(
+            "OK",
+            "Registry Source Added",
             _kv_table(
                 (
+                    ("Source", result.source),
                     ("Registry", _path(result.registry_path)),
-                    ("Cache", _path(result.cache_path)),
-                    ("Indexed versions", str(result.brick_versions)),
+                    ("Next", "compute-flow update (with --registry if used)"),
                 )
             ),
             status_style="success",
         )
     )
+
+
+def render_registry_remove_result(
+    result: RegistryRemoveResult, console: Console = CONSOLE
+) -> None:
+    console.print(
+        _summary_panel(
+            "OK",
+            "Registry Source Removed",
+            _kv_table(
+                (
+                    ("Source", result.source),
+                    ("Registry", _path(result.registry_path)),
+                    ("Next", "compute-flow update (with --registry if used)"),
+                )
+            ),
+            status_style="success",
+        )
+    )
+
+
+def render_registry_list(
+    sources: list[RegistrySource], console: Console = CONSOLE
+) -> None:
+    if not sources:
+        console.print("No registry sources configured.")
+        return
+
+    table = Table(title="Registry Sources", box=box.SIMPLE)
+    table.add_column("Origin", style="muted")
+    table.add_column("Source", style="value", overflow="fold")
+    for entry in sources:
+        table.add_row(entry.origin, entry.source)
+    console.print(table)
 
 
 def render_build_result(result: BuildResult, console: Console = CONSOLE) -> None:
@@ -142,9 +224,51 @@ def render_check_result(result: CheckResult, console: Console = CONSOLE) -> None
 
 
 def render_brick_list(
-    summaries: list[BrickSummary], console: Console = CONSOLE
+    summaries: list[BrickSummary],
+    console: Console = CONSOLE,
+    *,
+    brick_types: Sequence[str] = (),
+    installed_only: bool = False,
 ) -> None:
     if not summaries:
+        if brick_types:
+            requested_types = ", ".join(brick_types)
+            if installed_only:
+                console.print(
+                    _summary_panel(
+                        "WARN",
+                        "No Matching Installed Bricks",
+                        Text("No installed variants found for: ", style="muted")
+                        + Text(requested_types, style="key"),
+                        status_style="warning",
+                    )
+                )
+                return
+
+            console.print(
+                _summary_panel(
+                    "WARN",
+                    "No Matching Brick Variants",
+                    Text("No cached variants found for: ", style="muted")
+                    + Text(requested_types, style="key"),
+                    status_style="warning",
+                )
+            )
+            return
+
+        if installed_only:
+            console.print(
+                _summary_panel(
+                    "WARN",
+                    "No Installed Bricks",
+                    Text("Run ", style="muted")
+                    + Text("compute-flow brick install", style="command")
+                    + Text(" to install a brick.", style="muted"),
+                    status_style="warning",
+                )
+            )
+            return
+
         console.print(
             _summary_panel(
                 "WARN",
@@ -159,7 +283,15 @@ def render_brick_list(
 
     console.print(
         Group(
-            _section_header("Available Bricks", f"{len(summaries)} cached bricks"),
+            _section_header(
+                "Installed Bricks" if installed_only else "Available Bricks",
+                (
+                    f"{len(summaries)} installed "
+                    f"{'brick' if len(summaries) == 1 else 'bricks'}"
+                    if installed_only
+                    else f"{len(summaries)} cached bricks"
+                ),
+            ),
             (
                 _compact_brick_list(summaries)
                 if console.width < 78
@@ -178,7 +310,7 @@ def render_brick_model_list(
             _summary_panel(
                 "WARN",
                 "Models",
-                Text("No declared models.", style="muted"),
+                Text("No declared or imported models.", style="muted"),
                 status_style="warning",
             )
         )
@@ -186,7 +318,7 @@ def render_brick_model_list(
 
     console.print(
         Group(
-            _section_header("Models", f"{model_count} declared models"),
+            _section_header("Models", f"{model_count} managed models"),
             _brick_model_table(model_lists),
         )
     )
@@ -203,6 +335,8 @@ def render_brick_model_info(
                     ("Model", model.name),
                     ("Version", model.version),
                     ("Status", _model_info_status(model.installed)),
+                    ("Origin", model.origin),
+                    ("Template", model.template or "-"),
                     ("Size", _format_size(model.size_bytes)),
                 )
             )
@@ -290,16 +424,15 @@ def render_install_result(result: InstallResult, console: Console = CONSOLE) -> 
         "reinstalled_missing": "Brick Reinstalled",
         "replaced": "Brick Replaced",
     }
-    content: list[RenderableType] = [
-        _kv_table(
-            (
-                ("Brick", result.identity),
-                ("State", _value(result.status.replace("_", " "))),
-                ("Path", _path(result.install_path)),
-            )
-        )
+    rows: list[tuple[str, RenderableType | str]] = [
+        ("Brick", result.identity),
+        ("State", _value(result.status.replace("_", " "))),
+        ("Path", _path(result.install_path)),
     ]
-    if result.removed_models or result.refreshed_models:
+    if result.test_script_path is not None:
+        rows.append(("Test script", _path(result.test_script_path)))
+    content: list[RenderableType] = [_kv_table(rows)]
+    if result.removed_models or result.incompatible_models:
         content.extend(
             (
                 Rule("Models", style="dim"),
@@ -328,6 +461,26 @@ def render_model_install_result(
                 _kv_table((("Brick", brick), ("Version", version))),
                 Rule("Models", style="dim"),
                 _model_install_table(result),
+            ),
+            status_style="success",
+        )
+    )
+
+
+def render_model_import_result(
+    result: ModelImportResult, console: Console = CONSOLE
+) -> None:
+    console.print(
+        _summary_panel(
+            "OK",
+            "Model Imported Successfully",
+            _kv_table(
+                (
+                    ("Model", result.name),
+                    ("Template", result.template),
+                    ("Manifest", result.manifest),
+                    ("Location", _path(result.path)),
+                )
             ),
             status_style="success",
         )
@@ -427,29 +580,20 @@ def render_uninstall_result(
             status_style="success",
         )
     )
-    if result.kept_models:
-        brick = result.identity.split("@", 1)[0]
+    if result.removed_models:
         console.print(
             _summary_panel(
-                "WARN",
-                "Installed Models Kept",
+                "OK",
+                "Related Models Removed",
                 Group(
                     Text(
-                        f"{len(result.kept_models)} installed model(s) were kept.",
-                        style="warning",
-                    ),
-                    Text.assemble(
-                        ("Use ", "muted"),
-                        (
-                            f"compute-flow model uninstall {brick} --all",
-                            "command",
-                        ),
-                        (" to remove them.", "muted"),
+                        f"{len(result.removed_models)} related model artifact(s) were removed.",
+                        style="success",
                     ),
                     Rule("Models", style="dim"),
-                    _kept_models_table(result.kept_models),
+                    _removed_models_table(result.removed_models),
                 ),
-                status_style="warning",
+                status_style="success",
             )
         )
 
@@ -492,29 +636,13 @@ def render_uninstall_all_result(
                             "Cleared missing",
                             result.statuses.get("cleared_missing", 0),
                         ),
-                        ("Models kept", result.kept_models),
+                        ("Models removed", result.removed_models),
                     )
                 ),
             ),
             status_style="success",
         )
     )
-    if result.kept_models:
-        console.print(
-            _summary_panel(
-                "WARN",
-                "Installed Models Kept",
-                Text.assemble(
-                    (f"{result.kept_models} installed model(s) were kept. ", "warning"),
-                    (
-                        "Use compute-flow model uninstall <type:name> --all "
-                        "to remove model artifacts for each brick.",
-                        "muted",
-                    ),
-                ),
-                status_style="warning",
-            )
-        )
 
 
 def _overview_panel(state_paths: StatePaths) -> Panel:
@@ -525,7 +653,7 @@ def _overview_panel(state_paths: StatePaths) -> Panel:
     commands.add_row("info", "Show cached metadata for one brick")
     commands.add_row("path", "Print the installed brick source path")
     commands.add_row("install", "Install brick source files")
-    commands.add_row("uninstall", "Remove installed brick source files")
+    commands.add_row("uninstall", "Remove installed bricks and model artifacts")
 
     content = Group(
         Text("Manage cached and installed Compute Flow bricks.", style="app.subtitle"),
@@ -567,21 +695,28 @@ def _operation_panel(title: str, identity: str, path: Path, status: str) -> Pane
 def _models_table(models: dict[str, Any]) -> Table:
     table = Table(box=box.SIMPLE_HEAD, expand=True)
     table.add_column("Model", style="key", overflow="fold", ratio=2)
-    table.add_column("Ref", no_wrap=True)
     table.add_column("SHA256", overflow="fold", ratio=2)
     table.add_column("Description", overflow="fold", ratio=2)
-    table.add_column("URL", overflow="fold")
+    table.add_column("Sources", overflow="fold", ratio=3)
 
     for name, metadata in sorted(models.items()):
         table.add_row(
             name,
-            _value(metadata.get("ref")),
             _value(metadata.get("sha256")),
             _value(metadata.get("description")),
-            _value(metadata.get("url")),
+            _model_sources_value(metadata),
         )
 
     return table
+
+
+def _model_sources_value(metadata: dict[str, Any]) -> Text:
+    lines = []
+    for source in metadata["sources"]:
+        ref = source.get("ref")
+        suffix = f"@{ref}" if ref else ""
+        lines.append(f"{source['kind']}: {source['url']}{suffix}")
+    return Text("\n".join(lines))
 
 
 def _dependency_status_table(result: CheckResult) -> Table:
@@ -695,6 +830,22 @@ def _model_install_table(result: ModelInstallResult) -> Table:
     return table
 
 
+def _brick_update_table(updates: list[BrickUpdate]) -> Table:
+    table = Table(box=box.SIMPLE_HEAD, expand=True, show_lines=False)
+    table.add_column("Installed", style="key", no_wrap=True)
+    table.add_column("Available", style="value", no_wrap=True)
+    table.add_column("Recommended command", style="command", overflow="fold")
+
+    for update in updates:
+        table.add_row(
+            update.installed_identity,
+            update.available_identity,
+            f"compute-flow brick install {update.available_identity} --force",
+        )
+
+    return table
+
+
 def _model_uninstall_table(result: ModelUninstallResult) -> Table:
     table = Table(box=box.SIMPLE_HEAD, expand=True, show_lines=False)
     table.add_column("Model", style="key", no_wrap=True)
@@ -713,13 +864,13 @@ def _manifest_list(manifests: list[str]) -> Group | Text:
     return Group(*(Text(f"- {manifest}", style="value") for manifest in manifests))
 
 
-def _kept_models_table(model_names: list[str]) -> Table:
+def _removed_models_table(model_names: list[str]) -> Table:
     table = Table(box=box.SIMPLE_HEAD, expand=True, show_lines=False)
     table.add_column("Model", style="key", no_wrap=True)
     table.add_column("State", no_wrap=True)
 
     for model_name in model_names:
-        table.add_row(model_name, "kept")
+        table.add_row(model_name, "removed")
 
     return table
 
@@ -730,9 +881,9 @@ def _model_reconcile_table(result: InstallResult) -> Table:
     table.add_column("State", no_wrap=True)
 
     for model_name in result.removed_models:
-        table.add_row(model_name, "removed")
-    for model_name in result.refreshed_models:
-        table.add_row(model_name, "refreshed")
+        table.add_row(model_name, "removed; no longer declared")
+    for model_name in result.incompatible_models:
+        table.add_row(model_name, "removed; incompatible package")
 
     return table
 
@@ -763,6 +914,7 @@ def _brick_model_table(model_lists: list[BrickModelList]) -> Table:
     table.add_column("Brick", style="key", no_wrap=True)
     table.add_column("Version", style="value", no_wrap=True)
     table.add_column("Model", style="key", no_wrap=True)
+    table.add_column("Origin", no_wrap=True)
     table.add_column("Installed", justify="center", no_wrap=True)
     table.add_column("Description", overflow="fold", ratio=2)
 
@@ -776,13 +928,14 @@ def _brick_model_table(model_lists: list[BrickModelList]) -> Table:
                 brick,
                 version,
                 model.name,
+                model.origin,
                 _installed_version_marker(
                     model_list.version if model.installed else None
                 ),
                 model.description,
             )
         if index != len(non_empty_model_lists) - 1:
-            table.add_row("", "", "", "", "")
+            table.add_row("", "", "", "", "", "")
 
     return table
 

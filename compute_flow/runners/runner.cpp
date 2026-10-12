@@ -22,6 +22,7 @@
 #include "runners/mnn/mnn_runner.h"
 #endif
 #ifdef COMPUTE_FLOW_HAS_SENTENCEPIECE
+#include "runners/sentencepiece_decode/sentencepiece_decode_runner.h"
 #include "runners/sentencepiece_encode/sentencepiece_encode_runner.h"
 #endif
 #ifdef COMPUTE_FLOW_HAS_HF_TOKENIZER
@@ -55,6 +56,12 @@ std::unique_ptr<IRunner> make_runner(RunnerType type) {
         case RunnerType::SentencePieceEncode:
 #ifdef COMPUTE_FLOW_HAS_SENTENCEPIECE
             return std::make_unique<RunnerAdapter<SentencePieceEncodeRunner>>();
+#else
+            throw_disabled_runner("SentencePiece");
+#endif
+        case RunnerType::SentencePieceDecode:
+#ifdef COMPUTE_FLOW_HAS_SENTENCEPIECE
+            return std::make_unique<SentencePieceDecodeRunner>();
 #else
             throw_disabled_runner("SentencePiece");
 #endif

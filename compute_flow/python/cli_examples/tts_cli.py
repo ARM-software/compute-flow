@@ -5,21 +5,23 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 """
-Python CLI for the TTS brick — mirrors the C++ tool one-to-one.
+Python CLI for the TTS brick with optional audio playback.
 
 Usage:
-  python -m cli_examples.tts_cli -m <manifest_path> (-p <prompt> | -j <runs.json>) [-t <thread_spec>] [-o <output_file>]
+  python -m cli_examples.tts_cli -m <manifest_path> (-p <prompt> | -j <runs.json>) [-t <thread_spec>] [-o <output_file>] [--playback]
 """
 
 import argparse
+import importlib
 import os
 import sys
 import time
 import multiprocessing as mp
+from multiprocessing.queues import Queue
 
 try:
     import numpy as np
-except ImportError as exc:
+except ImportError:
     print(
         "Error: `numpy` is required. Install dependencies from the repo root with "
         "`python -m pip install -r requirements.txt`.",
@@ -44,7 +46,7 @@ def save_as_wav(
     """
     try:
         import soundfile as sf  # pip install soundfile
-    except Exception as e:
+    except Exception:
         print(
             "Error: `soundfile` is required to save WAVs. Try: pip install soundfile",
             file=sys.stderr,
@@ -67,8 +69,8 @@ def _tts_process(
     thread_spec: str,
     enable_op_profiling: bool,
     output_file: str | None,
-    audio_queue: mp.Queue,
-    stats_queue: mp.Queue,
+    audio_queue: Queue | None,
+    stats_queue: Queue,
 ) -> None:
     # Parse the number of CPU threads to use
     default_threads, model_threads = parse_hint_cpu_threads(thread_spec)
@@ -117,14 +119,15 @@ def _tts_process(
             left_copy = np.asarray(left, dtype=np.float32).copy()
             right_copy = np.asarray(right, dtype=np.float32).copy()
 
-            # Add into the queue
-            audio_queue.put((left_copy, right_copy, sample_rate))
+            if audio_queue is not None:
+                audio_queue.put((left_copy, right_copy, sample_rate))
 
             total_samples += left_copy.size
             left_full.append(left_copy)
             right_full.append(right_copy)
 
-    audio_queue.put(None)
+    if audio_queue is not None:
+        audio_queue.put(None)
 
     # Display profiler run
     print(brick.write_profile(), end="")
@@ -156,7 +159,7 @@ def _tts_process(
     )
 
 
-def _playback_process(audio_queue: mp.Queue, stats_queue: mp.Queue) -> None:
+def _playback_process(audio_queue: Queue, stats_queue: Queue) -> None:
     try:
         import sounddevice as sd
     except ImportError:
@@ -231,29 +234,27 @@ def run_single(
     output_file: str | None,
     thread_spec: str,
     enable_op_profiling: bool,
+    playback: bool,
 ) -> int:
     manifest_path = get_manifest_path(manifest_path, "tts")
 
-    try:
-        import sounddevice
-    except ImportError as exc:
-        print(
-            "Error: `sounddevice` is required for audio playback. Install it with "
-            "`python -m pip install sounddevice` or `python -m pip install -r requirements.txt`.",
-            file=sys.stderr,
-        )
-        return 1
+    if playback:
+        try:
+            importlib.import_module("sounddevice")
+        except ImportError:
+            print(
+                "Error: `sounddevice` is required for audio playback. Install it with "
+                "`python -m pip install sounddevice`.",
+                file=sys.stderr,
+            )
+            return 1
 
     ctx = mp.get_context("spawn")
-    audio_queue = ctx.Queue()
+    audio_queue = ctx.Queue() if playback else None
     tts_stats_queue = ctx.Queue()
-    playback_stats_queue = ctx.Queue()
+    playback_stats_queue = ctx.Queue() if playback else None
 
     tts = ctx.Process(
-        target=_playback_process,
-        args=(audio_queue, playback_stats_queue),
-    )
-    playback = ctx.Process(
         target=_tts_process,
         args=(
             manifest_path,
@@ -266,31 +267,39 @@ def run_single(
         ),
     )
 
+    if playback:
+        player = ctx.Process(
+            target=_playback_process,
+            args=(audio_queue, playback_stats_queue),
+        )
+        player.start()
     tts.start()
-    playback.start()
 
-    playback_stats = tts_stats_queue.get()
-    tts_stats = playback_stats_queue.get()
+    tts_stats = tts_stats_queue.get()
+    if playback:
+        playback_stats = playback_stats_queue.get()
 
-    playback.join()
     tts.join()
+    if playback:
+        player.join()
 
-    print(f"Run time (sum of brick.run): {playback_stats['run_time_s']:.3f}s")
-    print(f"Audio length: {playback_stats['audio_len_s']:.3f}s")
-    print(f"Blocking stream.write time: {tts_stats['stream_write_s']:.3f}s")
-    if playback_stats["audio_len_s"] > 0:
-        rtf = playback_stats["run_time_s"] / playback_stats["audio_len_s"]
+    print(f"Run time (sum of brick.run): {tts_stats['run_time_s']:.3f}s")
+    print(f"Audio length: {tts_stats['audio_len_s']:.3f}s")
+    if playback:
+        print(f"Blocking stream.write time: {playback_stats['stream_write_s']:.3f}s")
+    if tts_stats["audio_len_s"] > 0:
+        rtf = tts_stats["run_time_s"] / tts_stats["audio_len_s"]
         print(f"Real-time factor (RTF): {rtf:.3f} ( < 1 means realtime )")
     else:
         print("Real-time factor (RTF): unavailable")
 
-    first_run_time_s = playback_stats.get("first_run_time_s")
+    first_run_time_s = tts_stats.get("first_run_time_s")
     if first_run_time_s is None:
-        print("Time to first chunk played: unavailable")
+        print("Time to first chunk generated: unavailable")
     else:
-        print(f"Time to first chunk played: {first_run_time_s:.3f}s")
+        print(f"Time to first chunk generated: {first_run_time_s:.3f}s")
 
-    print(f"Saved: {playback_stats['saved_path']}")
+    print(f"Saved: {tts_stats['saved_path']}")
     return 0
 
 
@@ -299,7 +308,19 @@ def run_multiple(
     runs_file: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    playback: bool,
 ) -> int:
+    if playback:
+        try:
+            import sounddevice as sd
+        except ImportError:
+            print(
+                "Error: `sounddevice` is required for audio playback. Install it with "
+                "`python -m pip install sounddevice`.",
+                file=sys.stderr,
+            )
+            return 1
+
     default_threads, model_threads = parse_hint_cpu_threads(thread_spec)
     manifest_path = get_manifest_path(manifest_path, "tts")
     manifest = cf.load_manifest(manifest_path)
@@ -370,7 +391,7 @@ def run_multiple(
         else:
             print(f"Time to first chunk generated: {first_run_time_s:.3f}s")
 
-        if output_file is not None:
+        if output_file is not None or playback:
             left_result = (
                 np.concatenate(left_full)
                 if left_full
@@ -381,9 +402,15 @@ def run_multiple(
                 if right_full
                 else np.array([], dtype=np.float32)
             )
-            output_file = output_file or "output.wav"
-            save_as_wav(output_file, left_result, right_result, sr=sample_rate)
-            print(f"Saved: {os.path.abspath(output_file)}")
+            if output_file is not None:
+                output_file = output_file or "output.wav"
+                save_as_wav(output_file, left_result, right_result, sr=sample_rate)
+                print(f"Saved: {os.path.abspath(output_file)}")
+            if playback and total_samples:
+                with sd.OutputStream(
+                    samplerate=sample_rate, channels=2, dtype="float32", blocksize=0
+                ) as stream:
+                    stream.write(np.column_stack((left_result, right_result)))
 
     return 0
 
@@ -405,7 +432,7 @@ def main(argv=None) -> int:
     parser.add_argument(
         "-j",
         dest="runs_file",
-        help="Run multiple entries without reloading the model and without playback",
+        help="Run multiple entries without reloading the model",
     )
     parser.add_argument(
         "-t",
@@ -418,6 +445,11 @@ def main(argv=None) -> int:
         dest="output_file",
         default=None,
         help="(Optional) Output audio file name (Default: output.wav)",
+    )
+    parser.add_argument(
+        "--playback",
+        action="store_true",
+        help="Play generated audio (default: off)",
     )
     parser.add_argument(
         "--enable-op-profiling",
@@ -443,6 +475,7 @@ def main(argv=None) -> int:
                 args.runs_file,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.playback,
             )
         except ValueError as error:
             parser.error(str(error))
@@ -453,6 +486,7 @@ def main(argv=None) -> int:
         args.output_file,
         args.thread_spec,
         args.enable_op_profiling,
+        args.playback,
     )
 
 
