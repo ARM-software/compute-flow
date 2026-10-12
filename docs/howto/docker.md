@@ -4,7 +4,7 @@
     SPDX-License-Identifier: Apache-2.0
 -->
 
-### Docker builds (base + bricks examples)
+### Build the base Docker image
 
 #### Build base image (local)
 
@@ -16,31 +16,13 @@ docker buildx bake deps
 docker buildx bake
 ```
 
-This produces `compute-flow-base:latest`. Runtime images should inherit from
-`compute-flow-base:latest` and define their own entrypoints.
-
-#### Build runtime image (Minimal example)
-
-```bash
-docker buildx bake example
-```
-
-This produces a local image tagged `compute-flow-example:local`. The example Dockerfile runs the
-Kokoro TTS CLI by default.
+This produces `compute-flow-base:latest`. Runtime images can inherit from this image and define
+their own entrypoints.
 
 #### Build (Raspberry Pi® / linux/arm64)
 
 ```bash
 docker buildx bake base-pi
-docker buildx bake example-pi
 ```
 
-This produces `compute-flow-base-arm64:latest` and `compute-flow-example-arm64:latest`.
-
-#### Run (Bricks Example)
-
-Mount your model pack directory as `/models`:
-
-```bash
-docker compose -f .docker/compose.yml up
-```
+This produces `compute-flow-base-arm64:latest`.

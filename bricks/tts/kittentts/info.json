@@ -1,9 +1,0 @@
-{
-  "name": "KittenTTS",
-  "type": "tts",
-  "api": "tts.v1",
-  "description": "Single-model text-to-speech with voice styles, speed control, and espeak phonemizer.",
-  "author": "Arm Limited",
-  "version": "1.0.0",
-  "models": {}
-}
