@@ -2,6 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 models:
-  nemotron-3-diarization-fp32:
+  nemotron-3-diarization-litert-fp32:
     nemotron3_diarization_manifest.json:
       - args: ["-a", "@sample/diarization_example.wav", "-t", "2"]

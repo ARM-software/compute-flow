@@ -43,7 +43,7 @@ Update the local brick registry, then install both model packages:
 
 ```bash
 compute-flow update
-compute-flow model install audio_detection:nemotron3-diarization nemotron-3-diarization-fp32
+compute-flow model install audio_detection:nemotron3-diarization nemotron-3-diarization-litert-fp32
 compute-flow model install stt:parakeet-tdt parakeet-tdt-0-6b-v3-int8-dynamic
 ```
 
@@ -180,7 +180,7 @@ Resolve the installed manifests, then run both bricks on the sample included wit
 model:
 
 ```bash
-NEMOTRON_PACKAGE="$(compute-flow model path audio_detection:nemotron3-diarization nemotron-3-diarization-fp32)"
+NEMOTRON_PACKAGE="$(compute-flow model path audio_detection:nemotron3-diarization nemotron-3-diarization-litert-fp32)"
 PARAKEET_PACKAGE="$(compute-flow model path stt:parakeet-tdt parakeet-tdt-0-6b-v3-int8-dynamic)"
 
 python speaker_transcription_example/transcribe_audio.py \

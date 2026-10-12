@@ -9,17 +9,6 @@
     "nlohmann_json"
   ],
   "models": {
-    "nemotron-3-diarization-fp32": {
-      "description": "Speaker diarization for up to eight speakers, including overlapping speech.",
-      "sources": [
-        {
-          "kind": "huggingface",
-          "url": "https://huggingface.co/Arm/nemotron-3-diarization-mix-frameworks-fp32",
-          "ref": "9844bc7c39a62162e9f4876eb6a0fecf56f8bf20"
-        }
-      ],
-      "sha256": "6f2a236a27d560578c7918ff36c4324ecf57b39e836f0ceb4246fdf0842855ed"
-    },
     "nemotron-3-diarization-litert-fp32": {
       "description": "Speaker diarization for up to eight speakers with fp32.",
       "sources": [
