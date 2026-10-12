@@ -161,6 +161,20 @@ message(STATUS "llama.cpp: building from source via ExternalProject")
 compute_flow_dep_prefix_dir(llamacpp_prefix_dir "llama-cpp")
 compute_flow_dep_install_dir(llamacpp_install_dir "llama-cpp")
 
+if(CMAKE_CROSSCOMPILING)
+    set(_llama_arch_flags "-march=armv8.2-a+dotprod+fp16")
+elseif(APPLE)
+    # llama.cpp adds its own native CPU flags on Apple platforms. Keep this baseline to avoid
+    # conflicting with its feature detection while preserving the existing macOS® performance.
+    set(_llama_arch_flags "-march=armv8.2-a+dotprod+fp16")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64|arm|ARM)")
+    set(_llama_arch_flags "-mcpu=native")
+else()
+    set(_llama_arch_flags "-march=native")
+endif()
+
+message(STATUS "llama.cpp: compiler architecture flags: ${_llama_arch_flags}")
+
 ExternalProject_Add(
     compute_flow_dep_llama_cpp
     GIT_REPOSITORY "${COMPUTE_FLOW_LLAMACPP_GIT_REPO}"
@@ -175,7 +189,7 @@ ExternalProject_Add(
         ${CMAKE_CURRENT_LIST_DIR}/PatchLlamaCpp.cmake
     CMAKE_ARGS
         ${COMPUTE_FLOW_EP_COMMON_CMAKE_ARGS} -DBUILD_SHARED_LIBS:BOOL=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-        -DCMAKE_C_FLAGS:STRING="-march=armv8.2-a+dotprod+fp16" -DCMAKE_CXX_FLAGS:STRING="-march=armv8.2-a+dotprod+fp16"
+        -DCMAKE_C_FLAGS:STRING=${_llama_arch_flags} -DCMAKE_CXX_FLAGS:STRING=${_llama_arch_flags}
         -DLLAMA_BUILD_COMMON:BOOL=OFF -DLLAMA_BUILD_TESTS:BOOL=OFF -DLLAMA_BUILD_EXAMPLES:BOOL=OFF
         -DLLAMA_BUILD_SERVER:BOOL=OFF -DLLAMA_BUILD_APP:BOOL=OFF -DLLAMA_CURL:BOOL=OFF -DGGML_CPU_KLEIDIAI:BOOL=ON
         -DGGML_METAL:BOOL=OFF -DGGML_BLAS:BOOL=OFF -DGGML_OPENMP:BOOL=OFF ${_llama_openmp_cmake_args}

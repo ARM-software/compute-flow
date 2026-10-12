@@ -53,6 +53,9 @@ else()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    foreach(linker_flags IN ITEMS CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
+        string(APPEND ${linker_flags} " -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")
+    endforeach()
     target_link_libraries(compute_flow_sdk INTERFACE android log EGL GLESv3 GLESv2)
 endif()
 

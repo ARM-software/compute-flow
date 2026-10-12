@@ -1,0 +1,38 @@
+{
+    "name": "audio_classification.v1",
+    "description": "Classifies a raw mono audio waveform and ranks its classes by descending confidence score.",
+    "inputs": {
+        "raw_wav": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_samples"],
+            "description": "Raw mono audio waveform."
+        },
+        "sample_rate": {
+            "index": 1,
+            "dtype": "int64",
+            "shape": [1],
+            "description": "Sample rate of the input waveform in Hz."
+        }
+    },
+    "outputs": {
+        "id": {
+            "index": 0,
+            "dtype": "int64",
+            "shape": ["#num_classes_reported"],
+            "description": "Non-negative class IDs, ranked from highest to lowest confidence score. IDs are stable within a brick variant and need not be contiguous. At least one class is reported."
+        },
+        "score": {
+            "index": 1,
+            "dtype": "float32",
+            "shape": ["#num_classes_reported"],
+            "description": "Confidence scores in [0, 1], aligned with id and ordered from highest to lowest. Scores need not sum to one and are not required to be calibrated across variants."
+        },
+        "name": {
+            "index": 2,
+            "dtype": "uint8",
+            "shape": ["#num_classes_reported", "#max_name_length"],
+            "description": "UTF-8 class names aligned with id and score, padded with zero bytes. Every row contains a non-empty name."
+        }
+    }
+}

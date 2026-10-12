@@ -22,11 +22,10 @@
 include_guard(GLOBAL)
 
 # ---- Source coordinates (change version/tag here) ----------------------------------------
-set(COMPUTE_FLOW_PROTOBUF_VERSION "3.21.12")
 set(COMPUTE_FLOW_PROTOBUF_GIT_REPO "https://github.com/protocolbuffers/protobuf.git")
-set(COMPUTE_FLOW_PROTOBUF_GIT_TAG "v${COMPUTE_FLOW_PROTOBUF_VERSION}")
+set(COMPUTE_FLOW_PROTOBUF_GIT_TAG "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c") # v3.21.12
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ---- Try pre-installed (release / system) --------------------------------------------------
 if(NOT COMPUTE_FLOW_BUILD_PROTOBUF_FROM_SOURCE)
     set(Protobuf_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
     find_package(Protobuf CONFIG QUIET)

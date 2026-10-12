@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+models:
+  parakeet-tdt-0-6b-v3-int8-dynamic:
+    parakeet_tdt_0_6b_v3_manifest.json:
+      - args: ["-a", "@sample/beckett.wav", "-t", "2"]

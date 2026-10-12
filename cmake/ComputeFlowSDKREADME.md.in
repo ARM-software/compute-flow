@@ -6,8 +6,14 @@
 
 # Compute Flow Application SDK
 
-This directory contains the public headers and libraries produced by the corresponding
-`compute-flow build <target>` build.
+This directory contains the public headers, libraries, and installed brick metadata produced by the
+corresponding `compute-flow build <target>` build.
+
+Metadata for the installed bricks included in the build is available under
+`share/compute_flow/bricks/<type>/<name>/info.json`. Applications can use each declared model's
+ordered sources to download it and its `sha256` field to validate the downloaded `SHA256SUMS` file.
+This means applications do not need to maintain a separate registry of model URLs and checksums for
+the installed bricks.
 
 Add the SDK to an application and link its convenience target:
 
@@ -18,6 +24,22 @@ target_link_libraries(my_application PRIVATE compute_flow::sdk)
 
 The `compute_flow::sdk` target also configures the application to compile with C++17 or later and
 supplies the platform-specific link requirements of the packaged libraries.
+
+Applications using the SDK on Android™ must configure their final executables and shared libraries
+for 16 KB page sizes. NDK r28 and later provide compatible alignment by default. With NDK r27 or
+earlier, add the alignment options to the application's top-level `CMakeLists.txt` after
+`project()`:
+
+```cmake
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    foreach(linker_flags IN ITEMS CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
+        string(APPEND ${linker_flags} " -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")
+    endforeach()
+endif()
+```
+
+See the [Android™ 16 KB page-size guide](https://developer.android.com/guide/practices/page-sizes)
+for compatibility requirements and verification steps.
 
 To use a copied SDK directory as an application, add `main.cpp` and configure the directory as the
 top-level CMake project. `PROJ_NAME` defaults to `minimal_example`; change it in `CMakeLists.txt` to

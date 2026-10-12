@@ -11,15 +11,15 @@
 # Includes the modular per-dependency modules under cmake/deps/ in the correct order.
 #
 # Resolution strategy (per dependency):
-#   1. find_package() — discovers pre-installed packages (e.g. via Conan or system)
+#   1. find_package() — discovers pre-installed packages (release archives or system)
 #   2. ExternalProject fallback — builds from source when find_package fails
 #
-# Conan (COMPUTE_FLOW_USE_CONAN) and per-dep from-source flags can coexist: Conan populates
-# CMAKE_PREFIX_PATH, then each dep's find_package() discovers Conan packages. Per-dep
+# Release archives and per-dep from-source flags can coexist: the downloader populates
+# CMAKE_PREFIX_PATH, then each dep's find_package() discovers the installed packages. Per-dep
 # COMPUTE_FLOW_BUILD_<DEP>_FROM_SOURCE flags can override individual deps.
 #
 # Expected variables (set by the root CMakeLists.txt):
-#   COMPUTE_FLOW_USE_CONAN
+#   COMPUTE_FLOW_USE_PREBUILT_DEPS
 #   COMPUTE_FLOW_ENABLE_LITERT
 #   COMPUTE_FLOW_ENABLE_ONNXRUNTIME
 #   COMPUTE_FLOW_ENABLE_EXECUTORCH
@@ -34,7 +34,7 @@
 include(cmake/deps/Common.cmake)
 
 function(compute_flow_enable_source_dependencies)
-    set(COMPUTE_FLOW_USE_CONAN OFF CACHE BOOL "Fetch deps via Conan package manager" FORCE)
+    set(COMPUTE_FLOW_USE_PREBUILT_DEPS OFF CACHE BOOL "Fetch prebuilt dependency release archives" FORCE)
     foreach(
         source_option
         IN
@@ -50,14 +50,9 @@ function(compute_flow_enable_source_dependencies)
     endforeach()
 endfunction()
 
-# ---- Conan setup (optional — populates CMAKE_PREFIX_PATH) --------------------------------
-if(COMPUTE_FLOW_USE_CONAN)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/cmake/deps/Conan.cmake")
-        include(cmake/deps/Conan.cmake)
-    else()
-        message(STATUS "Conan packages are unavailable; building dependencies from source")
-        compute_flow_enable_source_dependencies()
-    endif()
+# ---- Release archives (optional — populates CMAKE_PREFIX_PATH) ---------------------------
+if(COMPUTE_FLOW_USE_PREBUILT_DEPS)
+    include(cmake/deps/Releases.cmake)
 endif()
 
 # ---- From-source banner ------------------------------------------------------------------

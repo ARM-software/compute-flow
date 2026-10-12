@@ -17,7 +17,7 @@
 include_guard(GLOBAL)
 
 set(COMPUTE_FLOW_MNN_GIT_REPO "https://github.com/alibaba/MNN.git")
-set(COMPUTE_FLOW_MNN_GIT_TAG "3.6.1")
+set(COMPUTE_FLOW_MNN_GIT_TAG "d407447ed56c4121a11ccbd266dc184ca1ead0c2") # 3.6.1
 
 if(COMPUTE_FLOW_ENABLE_MNN_GPU AND NOT ANDROID)
     message(FATAL_ERROR "MNN GPU acceleration is supported on Android™ only.")
@@ -52,6 +52,7 @@ message(STATUS "MNN: building from source via ExternalProject")
 
 compute_flow_dep_prefix_dir(mnn_prefix_dir "mnn")
 compute_flow_dep_install_dir(mnn_install_dir "mnn")
+configure_file("${CMAKE_CURRENT_LIST_DIR}/Config.cmake.in" "${mnn_prefix_dir}/MNNConfig.cmake" @ONLY)
 
 # MNN bundles a private FlatBuffers copy whose inline symbols otherwise collide with the copies in
 # other monolithic runtimes. Give that private implementation a distinct C++ namespace.
@@ -77,6 +78,14 @@ ExternalProject_Add(
         -DMNN_OPENCL:BOOL=${COMPUTE_FLOW_ENABLE_MNN_GPU} -DMNN_SME2:BOOL=ON -DMNN_VULKAN:BOOL=OFF
     BUILD_BYPRODUCTS <INSTALL_DIR>/${CMAKE_INSTALL_LIBDIR}/libMNN.a
     INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
+    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/schema/current <INSTALL_DIR>/include/MNN/schema
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/3rd_party/flatbuffers/include/flatbuffers
+        <INSTALL_DIR>/include/MNN/schema/flatbuffers
+    COMMAND ${CMAKE_COMMAND} -E make_directory <INSTALL_DIR>/lib/cmake/MNN
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different "${mnn_prefix_dir}/MNNConfig.cmake"
+        <INSTALL_DIR>/lib/cmake/MNN/MNNConfig.cmake
 )
 
 set(COMPUTE_FLOW_MNN_INSTALL_DIR "${mnn_install_dir}")

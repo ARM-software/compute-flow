@@ -1,0 +1,22 @@
+{
+  "name": "SileroVAD",
+  "type": "vad",
+  "api": "audio_binary_classification.v1",
+  "description": "Voice activity detection using Silero VAD for per-frame speech probability.",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "deps": [],
+  "models": {
+    "silero-fp32": {
+      "description": "Silero VAD fp32",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/silero-vad-fp32-onnx",
+          "ref": "4c05fa899af7c647b608e2befcc99f9851576e72"
+        }
+      ],
+      "sha256": "365415df5ad69f9b62b7e2f593329354fae6302884b0aaf8f8169b80027a9357"
+    }
+  }
+}

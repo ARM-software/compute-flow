@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+models:
+  zipdepth-base-executorch-fp16:
+    zipdepth_manifest.json:
+      - args: ["-i", "@sample/im0.jpg", "-o", "zipdepth_relative_depth.png", "-t", "2"]

@@ -1,0 +1,9 @@
+{
+  "name": "Kokoro",
+  "type": "tts",
+  "api": "tts.v1",
+  "description": "High-quality text-to-speech using Kokoro with voice styles, speed control, and multilingual support.",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "models": {}
+}

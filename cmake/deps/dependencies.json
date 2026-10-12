@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "version": "0.0.1",
+  "profiles": {
+    "android_aarch64": {
+      "system": "android",
+      "compiler": "clang",
+      "compiler_version": "19",
+      "cpp_standard": 17
+    },
+    "linux_aarch64": {
+      "system": "linux",
+      "compiler": "clang",
+      "compiler_version": "18",
+      "cpp_standard": 17
+    },
+    "macos_aarch64": {
+      "system": "darwin",
+      "compiler": "apple-clang",
+      "compiler_version": "17",
+      "cpp_standard": 17
+    }
+  },
+  "artifacts": [
+    {
+      "name": "executorch",
+      "version": "f7140a46ff38e919c557d45b102d3ff26097c8c9",
+      "profile": "linux_aarch64",
+      "filename": "executorch-1.5.0-linux-aarch64.tar.gz",
+      "sha256": "9ff2b948efc0cfca61a89ab5ddef49c26271f90e4e7ae7cc1a8b52f625bf68f2"
+    },
+    {
+      "name": "executorch",
+      "version": "f7140a46ff38e919c557d45b102d3ff26097c8c9",
+      "profile": "android_aarch64",
+      "filename": "executorch-1.5.0-android-aarch64.tar.gz",
+      "sha256": "4fd5270b48ac9fd16dd1a69e5d6a7cf51bf71593528caf84c592dc0ba784ef8f"
+    },
+    {
+      "name": "executorch",
+      "version": "f7140a46ff38e919c557d45b102d3ff26097c8c9",
+      "profile": "macos_aarch64",
+      "filename": "executorch-1.5.0-macos-aarch64.tar.gz",
+      "sha256": "e9ad43369a032beb96119c5fd58f2befd615a8611f75171ed6766e724819c3b7"
+    },
+    {
+      "name": "litert",
+      "version": "1461b6b2def31713f5c71446eab844aae05d02e9",
+      "profile": "linux_aarch64",
+      "filename": "litert-2.1.6-linux-aarch64.tar.gz",
+      "sha256": "95f93fbf1ed7d439f7a466f7a28e5dff9f054dfa09142b8b3bcd36b26595e74a"
+    },
+    {
+      "name": "litert",
+      "version": "1461b6b2def31713f5c71446eab844aae05d02e9",
+      "profile": "android_aarch64",
+      "filename": "litert-2.1.6-android-aarch64.tar.gz",
+      "sha256": "fe8d5856468c88f27f97270d4dfd5cb2e6d895d8a3a2284c68cb6b1cd43b3a17"
+    },
+    {
+      "name": "litert",
+      "version": "1461b6b2def31713f5c71446eab844aae05d02e9",
+      "profile": "macos_aarch64",
+      "filename": "litert-2.1.6-macos-aarch64.tar.gz",
+      "sha256": "5882360b3880315dc16cc923760fd794a33b5c77b4cff55608f0afa21097ddc6"
+    },
+    {
+      "name": "mnn",
+      "version": "d407447ed56c4121a11ccbd266dc184ca1ead0c2",
+      "profile": "linux_aarch64",
+      "filename": "mnn-3.6.1-linux-aarch64.tar.gz",
+      "sha256": "36bf21fc028e108b26c398f62acbb5ff8e565072d91ae5e5e2071c36b110276f"
+    },
+    {
+      "name": "mnn",
+      "version": "d407447ed56c4121a11ccbd266dc184ca1ead0c2",
+      "profile": "android_aarch64",
+      "filename": "mnn-3.6.1-android-aarch64.tar.gz",
+      "sha256": "dbc379d5dd330dab43e8753c9b8a1d8c491c523afd0e2a46c5df77c337c40978"
+    },
+    {
+      "name": "mnn",
+      "version": "d407447ed56c4121a11ccbd266dc184ca1ead0c2",
+      "profile": "macos_aarch64",
+      "filename": "mnn-3.6.1-macos-aarch64.tar.gz",
+      "sha256": "c1b7be62be475e272ad7f091cc311ea74855b4a7ddcd92392aa5740210ed8dbb"
+    },
+    {
+      "name": "onnxruntime",
+      "version": "e6e048e073fd9e787195d809a66904990d48b082",
+      "profile": "linux_aarch64",
+      "filename": "onnxruntime-e6e048e073fd9e787195d809a66904990d48b082-linux-aarch64.tar.gz",
+      "sha256": "29b2d473e0ccc74018e21405c5e97be8534c82c80dae776b4173bc70c4cf83b5"
+    },
+    {
+      "name": "onnxruntime",
+      "version": "e6e048e073fd9e787195d809a66904990d48b082",
+      "profile": "macos_aarch64",
+      "filename": "onnxruntime-e6e048e073fd9e787195d809a66904990d48b082-macos-aarch64.tar.gz",
+      "sha256": "4b314e139883014c0590bbdef6d24072330e639fbec0f9e5c4f3c0e202426399"
+    },
+    {
+      "name": "onnxruntime",
+      "version": "e6e048e073fd9e787195d809a66904990d48b082",
+      "profile": "android_aarch64",
+      "filename": "onnxruntime-e6e048e073fd9e787195d809a66904990d48b082-android-aarch64.tar.gz",
+      "sha256": "776a83fa3b90dc1f8819db557fffb26b94422fdf7fd779bf3b29ef375ea55083"
+    },
+    {
+      "name": "protobuf",
+      "version": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
+      "profile": "linux_aarch64",
+      "filename": "protobuf-3.21.12-linux-aarch64.tar.gz",
+      "sha256": "79f26f55dc31b8df5125e281e05be8d5882455075018507950ac4d16d99f50f5"
+    },
+    {
+      "name": "protobuf",
+      "version": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
+      "profile": "android_aarch64",
+      "filename": "protobuf-3.21.12-android-aarch64.tar.gz",
+      "sha256": "a7b6d2023f23de16b5c7fc3bedc26d074298898b4065e8519da03a3c8e64c619"
+    },
+    {
+      "name": "protobuf",
+      "version": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
+      "profile": "macos_aarch64",
+      "filename": "protobuf-3.21.12-macos-aarch64.tar.gz",
+      "sha256": "a180204331facbfdb62abaf49b50dbdce3aaf1f37b4c4b8a42a264d229d65482"
+    },
+    {
+      "name": "sentencepiece",
+      "version": "17d7580d6407802f85855d2cc9190634e2c95624",
+      "profile": "linux_aarch64",
+      "filename": "sentencepiece-0.2.0-linux-aarch64.tar.gz",
+      "sha256": "b7a02b2e05c7f360439d6cb6a61ba60789968a1eb49be4c3c92ca658454c64da"
+    },
+    {
+      "name": "sentencepiece",
+      "version": "17d7580d6407802f85855d2cc9190634e2c95624",
+      "profile": "macos_aarch64",
+      "filename": "sentencepiece-0.2.0-macos-aarch64.tar.gz",
+      "sha256": "bdafca62e239b3f53e8ee99f48712e31772bd8d95cc9287c08df70b540989632"
+    },
+    {
+      "name": "sentencepiece",
+      "version": "17d7580d6407802f85855d2cc9190634e2c95624",
+      "profile": "android_aarch64",
+      "filename": "sentencepiece-0.2.0-android-aarch64.tar.gz",
+      "sha256": "c411fd4b2ea700f86c8c193743f7a996d9ad50fe09486cdf53df530377411b12"
+    }
+  ]
+}

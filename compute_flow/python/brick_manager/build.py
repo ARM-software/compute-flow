@@ -11,7 +11,9 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import stat
 import subprocess
+import sys
 import tarfile
 import urllib.request
 import zipfile
@@ -24,7 +26,7 @@ from brick_manager.tools import ensure_cmake
 
 
 ANDROID_NDK_VERSION = "r27c"
-ANDROID_NDK_REVISION = "27.3.13750724"
+ANDROID_NDK_REVISION = "27.2.12479018"
 ARM_GNU_TOOLCHAIN_VERSION = "14.2.rel1"
 LINUX_ARM64_TRIPLE = "aarch64-none-linux-gnu"
 _SOURCE_BUILD_OPTIONS = (
@@ -109,6 +111,7 @@ def build_target(
         "-B",
         str(build_dir),
         "-DCMAKE_BUILD_TYPE=Release",
+        f"-DPython3_EXECUTABLE={sys.executable}",
         f"-DCMAKE_INSTALL_PREFIX={install_prefix}",
         *_dependency_cmake_args(from_source),
         f"-DCOMPUTE_FLOW_ENABLE_STREAMLINE={'ON' if streamline else 'OFF'}",
@@ -148,9 +151,9 @@ def build_target(
 
 def _dependency_cmake_args(from_source: bool) -> list[str]:
     source_setting = "ON" if from_source else "OFF"
-    conan_setting = "OFF" if from_source else "ON"
+    prebuilt_setting = "OFF" if from_source else "ON"
     return [
-        f"-DCOMPUTE_FLOW_USE_CONAN={conan_setting}",
+        f"-DCOMPUTE_FLOW_USE_PREBUILT_DEPS={prebuilt_setting}",
         *(f"-D{option}={source_setting}" for option in _SOURCE_BUILD_OPTIONS),
     ]
 
@@ -194,9 +197,11 @@ def _ensure_android_ndk(state_paths: StatePaths) -> Path:
     archive_name = _android_ndk_archive_name()
     toolchain_root = state_paths.home / "toolchains"
     ndk_dir = managed_android_ndk_path(state_paths)
-    toolchain_file = ndk_dir / "build/cmake/android.toolchain.cmake"
-    if toolchain_file.is_file():
+    if _managed_android_ndk_is_usable(ndk_dir):
         return ndk_dir
+
+    if ndk_dir.exists():
+        shutil.rmtree(ndk_dir)
 
     url = (
         "https://dl.google.com/android/repository/"
@@ -206,9 +211,10 @@ def _ensure_android_ndk(state_paths: StatePaths) -> Path:
     toolchain_root.mkdir(parents=True, exist_ok=True)
     _download(url, archive)
     _extract_zip(archive, toolchain_root)
-    if not toolchain_file.is_file():
+    if not _managed_android_ndk_is_usable(ndk_dir):
         raise BrickManagerError(
-            f"Downloaded Android™ NDK but did not find toolchain file: {toolchain_file}"
+            "Downloaded Android™ NDK but did not find an executable compiler and "
+            f"toolchain file under: {ndk_dir}"
         )
     _check_ndk_revision(ndk_dir)
     return ndk_dir
@@ -247,6 +253,16 @@ def _check_ndk_revision(ndk_dir: Path) -> None:
         raise BrickManagerError(
             f"Expected Android™ NDK {ANDROID_NDK_REVISION}, but {source_properties} differs."
         )
+
+
+def _managed_android_ndk_is_usable(ndk_dir: Path) -> bool:
+    toolchain_file = ndk_dir / "build/cmake/android.toolchain.cmake"
+    prebuilt_root = ndk_dir / "toolchains/llvm/prebuilt"
+    compilers = prebuilt_root.glob("*/bin/clang")
+    return toolchain_file.is_file() and any(
+        compiler.is_symlink() and compiler.is_file() and os.access(compiler, os.X_OK)
+        for compiler in compilers
+    )
 
 
 def _linux_arm64_cmake_args(state_paths: StatePaths, build_dir: Path) -> list[str]:
@@ -391,7 +407,63 @@ def _download(url: str, destination: Path) -> None:
 def _extract_zip(archive: Path, destination: Path) -> None:
     print(f"Extracting {archive}", flush=True)
     with zipfile.ZipFile(archive) as zip_file:
-        zip_file.extractall(destination)
+        members = zip_file.infolist()
+        symlinks: list[tuple[Path, str]] = []
+        file_modes: list[tuple[Path, int]] = []
+        directory_modes: list[tuple[Path, int]] = []
+
+        for member in members:
+            member_path = _validated_zip_path(destination, member.filename)
+            mode = member.external_attr >> 16
+            if member.create_system == 3 and stat.S_ISLNK(mode):
+                link_target = zip_file.read(member).decode("utf-8")
+                _validate_zip_symlink(destination, member_path, link_target)
+                symlinks.append((member_path, link_target))
+
+        for member in members:
+            mode = member.external_attr >> 16
+            if member.create_system == 3 and stat.S_ISLNK(mode):
+                continue
+            extracted_path = Path(zip_file.extract(member, destination))
+            if member.create_system != 3:
+                continue
+            permissions = stat.S_IMODE(mode)
+            if member.is_dir():
+                directory_modes.append((extracted_path, permissions))
+            else:
+                file_modes.append((extracted_path, permissions))
+
+        for extracted_path, permissions in file_modes:
+            extracted_path.chmod(permissions)
+        directory_modes.sort(key=lambda item: len(item[0].parts), reverse=True)
+        for extracted_path, permissions in directory_modes:
+            extracted_path.chmod(permissions)
+        for link_path, link_target in symlinks:
+            link_path.parent.mkdir(parents=True, exist_ok=True)
+            link_path.symlink_to(link_target)
+
+
+def _validated_zip_path(destination: Path, member_name: str) -> Path:
+    member_path = Path(member_name)
+    if member_path.is_absolute() or ".." in member_path.parts:
+        raise BrickManagerError(f"Unsafe Android™ NDK archive path: {member_name}")
+    destination_root = destination.resolve()
+    extracted_path = destination / member_path
+    if not extracted_path.resolve().is_relative_to(destination_root):
+        raise BrickManagerError(f"Unsafe Android™ NDK archive path: {member_name}")
+    return extracted_path
+
+
+def _validate_zip_symlink(destination: Path, link_path: Path, link_target: str) -> None:
+    target_path = Path(link_target)
+    destination_root = destination.resolve()
+    resolved_target = (link_path.parent / target_path).resolve()
+    if target_path.is_absolute() or not resolved_target.is_relative_to(
+        destination_root
+    ):
+        raise BrickManagerError(
+            f"Unsafe Android™ NDK archive symlink: {link_path} -> {link_target}"
+        )
 
 
 def _extract_tar_xz(archive: Path, destination: Path) -> None:

@@ -1,0 +1,36 @@
+{
+  "name": "Qwen3TTS",
+  "type": "tts",
+  "api": "tts.v1",
+  "description": "High-quality multilingual text-to-speech using Qwen3 LLM backbone with neural codec decoder.",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "deps": [
+    "libnpy",
+    "nlohmann_json"
+  ],
+  "models": {
+    "qwen3-tts-0-6b-custom-voice": {
+      "description": "Qwen3-TTS 0.6B Custom Voice optimized for CPUs.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/qwen3-tts-0-6b-custom-voice-mix-precision",
+          "ref": "193726246bc3df42f3a83c97280b1a4dcb6a9803"
+        }
+      ],
+      "sha256": "404b9e0d3423d34f1c31dceef834a2f69e8e089d2cb41c02dd7a1a2bb2b2a8d9"
+    },
+    "qwen3-tts-0-6b-base": {
+      "description": "Qwen3-TTS 0.6B Base (voice cloning) optimized for CPUs.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/qwen3-tts-0-6b-base-mix-precision",
+          "ref": "c62c16b5e7130db5a7ad2076e9fd87edd42f32ac"
+        }
+      ],
+      "sha256": "e20785e85a975ae796f3bb12b22bfd68eaa12c39dfffa8138ab89ff32915355b"
+    }
+  }
+}

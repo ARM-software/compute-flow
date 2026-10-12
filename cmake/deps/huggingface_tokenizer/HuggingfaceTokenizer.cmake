@@ -25,7 +25,7 @@ include_guard(GLOBAL)
 set(COMPUTE_FLOW_HF_TOKENIZER_GIT_REPO "https://github.com/wangzhaode/tokenizer.cpp.git")
 set(COMPUTE_FLOW_HF_TOKENIZER_GIT_TAG "8638367b9ae48928561f9212477b7be2260ca7a7")
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ---- Try pre-installed (release / system) --------------------------------------------------
 find_package(huggingface_tokenizer CONFIG QUIET)
 if(huggingface_tokenizer_FOUND)
     message(STATUS "HuggingFace tokenizer: found pre-installed")

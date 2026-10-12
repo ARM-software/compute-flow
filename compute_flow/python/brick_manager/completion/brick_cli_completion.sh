@@ -316,10 +316,30 @@ _compute_flow_bash_complete_files() {
     local current="$1"
     compopt -o filenames 2>/dev/null || true
     COMPREPLY=($(compgen -f -- "$current"))
+
+    if ! command -v compopt >/dev/null 2>&1; then
+        local index candidate
+        for ((index = 0; index < ${#COMPREPLY[@]}; index++)); do
+            candidate="${COMPREPLY[index]}"
+            if [ -d "$candidate" ]; then
+                [[ "$candidate" == */ ]] || COMPREPLY[index]="$candidate/"
+            else
+                COMPREPLY[index]="$candidate "
+            fi
+        done
+    fi
 }
 
 _compute_flow_bash_keep_completing_directories() {
-    local candidate
+    local candidate index
+    if ! command -v compopt >/dev/null 2>&1; then
+        for ((index = 0; index < ${#COMPREPLY[@]}; index++)); do
+            candidate="${COMPREPLY[index]}"
+            [[ "$candidate" == */ ]] || COMPREPLY[index]="$candidate "
+        done
+        return
+    fi
+
     for candidate in "${COMPREPLY[@]}"; do
         if [[ "$candidate" == */ ]]; then
             compopt -o nospace 2>/dev/null || true
@@ -544,7 +564,8 @@ EOF
 
 _compute_flow_manager_complete_bash() {
     local current="${COMP_WORDS[COMP_CWORD]}"
-    if [ "${COMP_WORDS[1]:-}" = "update" ] &&
+    if { [ "${COMP_WORDS[1]:-}" = "update" ] ||
+        [ "${COMP_WORDS[1]:-}" = "registry" ]; } &&
         [ "${COMP_WORDS[COMP_CWORD-1]:-}" = "--registry" ]; then
         _compute_flow_bash_complete_files "$current"
         return
@@ -607,7 +628,7 @@ _compute_flow_manager_complete_zsh() {
     local output
     local index
 
-    if [[ "${words[2]:-}" == "update" &&
+    if [[ ( "${words[2]:-}" == "update" || "${words[2]:-}" == "registry" ) &&
         "${words[CURRENT-1]:-}" == "--registry" ]]; then
         _files
         return
@@ -637,29 +658,36 @@ _compute_flow_manager_complete_zsh() {
             display_strings+=("$display")
         done
 
-        compadd -V compute-flow-models -l -d display_strings -- "${candidates[@]}"
+        compadd -S '' -V compute-flow-models -l -d display_strings -- "${candidates[@]}"
         return
     fi
 
-    if [[ "${candidates[1]}" == *: ]]; then
-        compadd -S '' -- "${candidates[@]}"
-    else
-        compadd -- "${candidates[@]}"
-    fi
+    compadd -S '' -- "${candidates[@]}"
 }
 
 if [ -n "${BASH_VERSION:-}" ] && command -v complete >/dev/null 2>&1; then
     COMP_WORDBREAKS="${COMP_WORDBREAKS//:}"
-    complete -D -F _compute_flow_brick_cli_complete_bash 2>/dev/null || true
+    _compute_flow_bash_cli_options=()
+    # Bash 3.2 has no compopt, so suppress spaces in the completion registration.
+    if ! command -v compopt >/dev/null 2>&1; then
+        _compute_flow_bash_cli_options=(-o nospace)
+    fi
+
+    complete "${_compute_flow_bash_cli_options[@]}" -D \
+        -F _compute_flow_brick_cli_complete_bash 2>/dev/null || true
     complete -o nospace -F _compute_flow_manager_complete_bash compute-flow 2>/dev/null || true
 
     while IFS= read -r _compute_flow_command; do
         [ -n "$_compute_flow_command" ] || continue
-        complete -F _compute_flow_brick_cli_complete_bash "$_compute_flow_command" 2>/dev/null || true
-        complete -F _compute_flow_brick_cli_complete_bash "./$_compute_flow_command" 2>/dev/null || true
+        complete "${_compute_flow_bash_cli_options[@]}" \
+            -F _compute_flow_brick_cli_complete_bash "$_compute_flow_command" 2>/dev/null || true
+        complete "${_compute_flow_bash_cli_options[@]}" \
+            -F _compute_flow_brick_cli_complete_bash "./$_compute_flow_command" 2>/dev/null || true
     done <<EOF
 $(_compute_flow_completion_commands | sort -u)
 EOF
+
+    unset _compute_flow_bash_cli_options
 fi
 
 if [ -n "${ZSH_VERSION:-}" ]; then

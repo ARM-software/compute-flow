@@ -8,10 +8,27 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
 from brick_manager.errors import BrickManagerError
+
+
+_GIT_URL_SCHEMES = frozenset(("file", "git", "http", "https", "ssh"))
+_SCP_GIT_URL = re.compile(r"^[^/\\:@]+@[^/\\:]+:.+$")
+
+
+def is_git_source(source: str) -> bool:
+    """Return whether a registry entry names a Git repository URL."""
+    parsed_source = urlparse(source)
+    if parsed_source.scheme in _GIT_URL_SCHEMES:
+        return True
+    if _SCP_GIT_URL.fullmatch(source):
+        return True
+    if parsed_source.scheme and len(parsed_source.scheme) != 1:
+        raise BrickManagerError(f"Unsupported registry source URL: {source}")
+    return False
 
 
 def default_registry_path() -> Path:
@@ -52,12 +69,22 @@ def parse_registry(registry_path: Path) -> list[str]:
     return sources
 
 
-def resolve_local_source(registry_path: Path, source: str) -> Path:
-    parsed_source = urlparse(source)
-    if parsed_source.scheme:
-        raise BrickManagerError(
-            f"Remote registry sources are not implemented yet: {source}"
+def registry_entries(
+    registry_path: Path, user_registry_path: Path | None = None
+) -> list[tuple[Path, str]]:
+    """Read packaged and optional user sources with their path origins."""
+    entries = [(registry_path, source) for source in parse_registry(registry_path)]
+    if user_registry_path is not None and user_registry_path.is_file():
+        entries.extend(
+            (user_registry_path, source)
+            for source in parse_registry(user_registry_path)
         )
+    return entries
+
+
+def resolve_local_source(registry_path: Path, source: str) -> Path:
+    if is_git_source(source):
+        raise BrickManagerError(f"Expected a local registry source: {source}")
 
     source_path = Path(source)
     if not source_path.is_absolute():

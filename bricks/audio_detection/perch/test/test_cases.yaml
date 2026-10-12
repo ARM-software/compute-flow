@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+models:
+  perch-v2-8bit:
+    perch_v2_8bit_manifest.json:
+      - args: ["-a", "@sample/erithacus_rubecula.wav", "-t", "2"]

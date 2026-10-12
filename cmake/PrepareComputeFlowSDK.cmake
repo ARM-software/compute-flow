@@ -9,6 +9,8 @@ foreach(
     IN
     ITEMS
         COMPUTE_FLOW_INCLUDE_DIR
+        COMPUTE_FLOW_INSTALLED_BRICK_IDENTITIES
+        COMPUTE_FLOW_INSTALLED_BRICK_SOURCE_DIRS
         COMPUTE_FLOW_LIBRARY_MANIFEST
         COMPUTE_FLOW_FORCE_LOAD_LIBRARY_MANIFEST
         COMPUTE_FLOW_SDK_DIR
@@ -22,6 +24,34 @@ set(sdk_staging_dir "${COMPUTE_FLOW_SDK_DIR}.staging")
 file(REMOVE_RECURSE "${sdk_staging_dir}")
 file(MAKE_DIRECTORY "${sdk_staging_dir}/include" "${sdk_staging_dir}/lib")
 file(COPY "${COMPUTE_FLOW_INCLUDE_DIR}/" DESTINATION "${sdk_staging_dir}/include")
+
+list(LENGTH COMPUTE_FLOW_INSTALLED_BRICK_IDENTITIES brick_identity_count)
+list(LENGTH COMPUTE_FLOW_INSTALLED_BRICK_SOURCE_DIRS brick_source_dir_count)
+if(NOT brick_identity_count EQUAL brick_source_dir_count)
+    message(FATAL_ERROR "Installed brick identities and source directories must have the same length.")
+endif()
+
+if(brick_identity_count GREATER 0)
+    math(EXPR last_brick_index "${brick_identity_count} - 1")
+    foreach(index RANGE 0 ${last_brick_index})
+        list(GET COMPUTE_FLOW_INSTALLED_BRICK_IDENTITIES ${index} brick_identity)
+        list(GET COMPUTE_FLOW_INSTALLED_BRICK_SOURCE_DIRS ${index} brick_source_dir)
+
+        if(NOT brick_identity MATCHES "^([^:]+):([^:]+)$")
+            message(FATAL_ERROR "Invalid installed brick identity: ${brick_identity}")
+        endif()
+        set(brick_type "${CMAKE_MATCH_1}")
+        set(brick_name "${CMAKE_MATCH_2}")
+        set(info_json "${brick_source_dir}/info.json")
+        if(NOT EXISTS "${info_json}")
+            message(FATAL_ERROR "Installed brick metadata does not exist: ${info_json}")
+        endif()
+
+        set(metadata_dir "${sdk_staging_dir}/share/compute_flow/bricks/${brick_type}/${brick_name}")
+        file(MAKE_DIRECTORY "${metadata_dir}")
+        file(COPY_FILE "${info_json}" "${metadata_dir}/info.json")
+    endforeach()
+endif()
 
 file(STRINGS "${COMPUTE_FLOW_LIBRARY_MANIFEST}" built_libraries)
 

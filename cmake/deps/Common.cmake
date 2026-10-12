@@ -126,6 +126,7 @@ foreach(android_var IN ITEMS ANDROID_ABI ANDROID_PLATFORM ANDROID_STL ANDROID_NA
     compute_flow_append_ep_cache_arg(COMPUTE_FLOW_EP_COMMON_CMAKE_ARGS ${android_var} STRING)
 endforeach()
 compute_flow_append_ep_cache_arg(COMPUTE_FLOW_EP_COMMON_CMAKE_ARGS ANDROID_NDK PATH)
+compute_flow_append_ep_cache_arg(COMPUTE_FLOW_EP_COMMON_CMAKE_ARGS ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES BOOL)
 
 # Android™: strip debug info in Release builds to reduce output size
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")

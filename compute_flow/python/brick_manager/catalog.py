@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,9 +20,11 @@ from brick_manager.errors import BrickManagerError
 from brick_manager.identity import (
     BrickSelector,
     parse_brick_selector,
+    validate_brick_component,
     validate_model_component,
 )
-from brick_manager.model_artifacts import artifact_sha256, model_artifact_path
+from brick_manager.metadata import load_installed_entry_info_json
+from brick_manager.model_artifacts import artifact_manifest_sha256, model_artifact_path
 from brick_manager.paths import StatePaths
 
 
@@ -41,8 +44,8 @@ class BrickSummary:
 class BrickModelSummary:
     name: str
     installed: bool
-    ref: str
-    sha256: str
+    origin: str
+    sha256: str | None
     description: str
 
 
@@ -61,6 +64,8 @@ class BrickModelInfoItem:
     location: str | None
     size_bytes: int | None
     manifests: list[str]
+    origin: str
+    template: str | None
 
 
 @dataclass(frozen=True)
@@ -79,13 +84,29 @@ class BrickInfo:
     metadata: dict[str, Any]
 
 
-def get_brick_summaries(state_paths: StatePaths) -> list[BrickSummary]:
+def get_brick_summaries(
+    state_paths: StatePaths,
+    brick_types: Sequence[str] = (),
+    *,
+    installed_only: bool = False,
+) -> list[BrickSummary]:
+    """Return cached brick summaries filtered by type and install state."""
     cache = load_required_cache(state_paths)
+    selected_types = set(brick_types)
+    for brick_type in selected_types:
+        validate_brick_component("type", brick_type)
+
     summaries = []
     for brick, version, entry in _iter_entries(cache):
+        brick_type, _, _ = brick.partition(":")
+        if selected_types and brick_type not in selected_types:
+            continue
+
         info_json = entry["info_json"]
         metadata = entry["metadata"]
         installed = bool(metadata.get("installed", False))
+        if installed_only and not installed:
+            continue
         summaries.append(
             BrickSummary(
                 brick=brick,
@@ -102,9 +123,17 @@ def get_brick_summaries(state_paths: StatePaths) -> list[BrickSummary]:
     return summaries
 
 
-def list_bricks(state_paths: StatePaths) -> str:
+def list_bricks(
+    state_paths: StatePaths,
+    brick_types: Sequence[str] = (),
+    *,
+    installed_only: bool = False,
+) -> str:
+    """Format cached brick summaries as a plain-text table."""
     rows = []
-    for summary in get_brick_summaries(state_paths):
+    for summary in get_brick_summaries(
+        state_paths, brick_types, installed_only=installed_only
+    ):
         rows.append(
             (
                 summary.brick,
@@ -121,9 +150,11 @@ def get_brick_model_list(state_paths: StatePaths, brick: str) -> BrickModelList:
     cache = load_required_cache(state_paths)
     selector = parse_brick_selector(brick)
     version, entry = select_versioned_entry(cache, selector)
-    info_json = entry["info_json"]
-    key = selector.key
     selected = BrickSelector(selector.brick_type, selector.name, version)
+    info_json = entry["info_json"]
+    if selector.version is None and entry["metadata"].get("installed", False):
+        info_json = _installed_info_json(entry, selected)
+    key = selector.key
     models = []
     for model_name, metadata in sorted(info_json.get("models", {}).items()):
         models.append(
@@ -132,14 +163,32 @@ def get_brick_model_list(state_paths: StatePaths, brick: str) -> BrickModelList:
                 installed=_model_installed(
                     state_paths,
                     selected,
+                    entry,
                     model_name,
                     metadata["sha256"],
                 ),
-                ref=metadata["ref"],
+                origin="Declared",
                 sha256=metadata["sha256"],
                 description=metadata["description"],
             )
         )
+
+    if selector.version is None and entry["metadata"].get("installed", False):
+        summaries = {model.name: model for model in models}
+        for model_name, state in sorted(
+            entry["metadata"].get("installed_models", {}).items()
+        ):
+            if state.get("origin") != "imported":
+                continue
+            path = model_artifact_path(state_paths, selected, model_name)
+            summaries[model_name] = BrickModelSummary(
+                name=model_name,
+                installed=_imported_model_installed(path, state),
+                origin="Imported",
+                sha256=None,
+                description="-",
+            )
+        models = [summaries[name] for name in sorted(summaries)]
 
     return BrickModelList(identity=f"{key}@{version}", version=version, models=models)
 
@@ -158,27 +207,40 @@ def get_brick_model_info(
         )
 
     version, entry = _select_installed_entry(cache, selector)
-    info_json = entry["info_json"]
     key = selector.key
     selected = BrickSelector(selector.brick_type, selector.name, version)
+    info_json = _installed_info_json(entry, selected)
     declared_models = info_json.get("models", {})
+    installed_models = entry["metadata"].get("installed_models", {})
     models = []
 
     for model_name in model_names:
         validate_model_component("name", model_name)
         metadata = declared_models.get(model_name)
-        if metadata is None:
-            available = ", ".join(sorted(declared_models)) or "none"
+        state = installed_models.get(model_name)
+        imported = state is not None and state.get("origin") == "imported"
+        if metadata is None and not imported:
+            available_models = set(declared_models) | {
+                name
+                for name, installed_state in installed_models.items()
+                if installed_state.get("origin") == "imported"
+            }
+            available = ", ".join(sorted(available_models)) or "none"
             raise BrickManagerError(
                 f"Unknown model for {key}: {model_name}. Available models: {available}"
             )
 
         path = model_artifact_path(state_paths, selected, model_name)
-        installed = _model_installed(
-            state_paths,
-            selected,
-            model_name,
-            metadata["sha256"],
+        installed = (
+            _imported_model_installed(path, state)
+            if imported
+            else _model_installed(
+                state_paths,
+                selected,
+                entry,
+                model_name,
+                metadata["sha256"],
+            )
         )
         models.append(
             BrickModelInfoItem(
@@ -188,6 +250,8 @@ def get_brick_model_info(
                 location=str(path) if installed else None,
                 size_bytes=_directory_size_bytes(path) if installed else None,
                 manifests=_root_model_manifests(path) if installed else [],
+                origin="Imported" if imported else "Declared",
+                template=state.get("template") if imported else None,
             )
         )
 
@@ -210,19 +274,39 @@ def get_brick_model_path(
     validate_model_component("name", model_name)
 
     version, entry = _select_installed_entry(cache, selector)
-    info_json = entry["info_json"]
     key = selector.key
     selected = BrickSelector(selector.brick_type, selector.name, version)
+    info_json = _installed_info_json(entry, selected)
     declared_models = info_json.get("models", {})
     metadata = declared_models.get(model_name)
-    if metadata is None:
-        available = ", ".join(sorted(declared_models)) or "none"
+    state = entry["metadata"].get("installed_models", {}).get(model_name)
+    imported = state is not None and state.get("origin") == "imported"
+    if metadata is None and not imported:
+        imported_models = {
+            name
+            for name, installed_state in entry["metadata"]
+            .get("installed_models", {})
+            .items()
+            if installed_state.get("origin") == "imported"
+        }
+        available = ", ".join(sorted(set(declared_models) | imported_models)) or "none"
         raise BrickManagerError(
             f"Unknown model for {key}: {model_name}. Available models: {available}"
         )
 
     path = model_artifact_path(state_paths, selected, model_name)
-    if not _model_installed(state_paths, selected, model_name, metadata["sha256"]):
+    installed = (
+        _imported_model_installed(path, state)
+        if imported
+        else _model_installed(
+            state_paths,
+            selected,
+            entry,
+            model_name,
+            metadata["sha256"],
+        )
+    )
+    if not installed:
         return None
     return path
 
@@ -390,16 +474,43 @@ def _version_sort_key(version: str) -> tuple[tuple[int, int | str], ...]:
 def _model_installed(
     state_paths: StatePaths,
     selector: BrickSelector,
+    entry: dict[str, Any],
     model_name: str,
     expected_sha256: str,
 ) -> bool:
     path = model_artifact_path(state_paths, selector, model_name)
-    if not path.exists():
+    state = entry["metadata"].get("installed_models", {}).get(model_name)
+    if (
+        state is None
+        or state.get("origin", "declared") != "declared"
+        or Path(state["path"]) != path
+        or state["sha256"] != expected_sha256
+    ):
         return False
     try:
-        return artifact_sha256(path) == expected_sha256
+        return artifact_manifest_sha256(path) == expected_sha256
     except (BrickManagerError, OSError):
         return False
+
+
+def _imported_model_installed(
+    path: Path,
+    state: dict[str, Any] | None,
+) -> bool:
+    return (
+        state is not None
+        and state.get("origin") == "imported"
+        and Path(state["path"]) == path
+        and path.is_dir()
+        and (path / state["manifest"]).is_file()
+    )
+
+
+def _installed_info_json(
+    entry: dict[str, Any],
+    selector: BrickSelector,
+) -> dict[str, Any]:
+    return load_installed_entry_info_json(entry, selector)
 
 
 def _root_model_manifests(path: Path) -> list[str]:

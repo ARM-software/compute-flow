@@ -1,0 +1,22 @@
+{
+  "name": "ParakeetTDT",
+  "type": "stt",
+  "api": "stt.v1",
+  "description": "Speech-to-text transcription using Parakeet TDT 0.6B v3.",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "deps": [],
+  "models": {
+    "parakeet-tdt-0-6b-v3-int8-dynamic": {
+      "description": "Parakeet TDT 0.6B v3 NeMo cached LiteRT package with dynamic int8 fully connected weights.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/parakeet-tdt-0-6b-v3-int8-litert",
+          "ref": "776346608906d009e950c50608c23f082b723a37"
+        }
+      ],
+      "sha256": "f84a48284b9396e149af7958ef637cddbd2d9209afe7b2229d1cee94140c1cf4"
+    }
+  }
+}

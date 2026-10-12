@@ -22,11 +22,13 @@ from brick_manager.identity import (
     validate_model_component,
 )
 from brick_manager.model_artifacts import (
-    artifact_sha256,
+    artifact_manifest_sha256,
     install_artifact,
     model_artifact_path,
     remove_artifact,
 )
+from brick_manager.metadata import load_installed_entry_info_json
+from brick_manager.model_import import imported_model_compatible
 from brick_manager.paths import StatePaths
 
 
@@ -62,7 +64,7 @@ class ModelUninstallResult:
 @dataclass(frozen=True)
 class ModelReconcileResult:
     removed: list[str]
-    refreshed: list[str]
+    incompatible: list[str]
 
 
 def validate_models_for_install(
@@ -81,12 +83,16 @@ def validate_models_for_install(
         )
 
     version, entry = select_versioned_entry(cache, selector)
+    selected = BrickSelector(selector.brick_type, selector.name, version)
+    info_json = entry["info_json"]
+    if _installed_source_exists(entry):
+        info_json = _installed_info_json(entry, selected)
     _validate_requested_models(
         selector.key,
-        entry["info_json"].get("models", {}),
+        info_json.get("models", {}),
         model_names,
     )
-    return BrickSelector(selector.brick_type, selector.name, version).identity
+    return selected.identity
 
 
 def install_models(
@@ -108,7 +114,7 @@ def install_models(
 
     version, entry = _select_installed_entry(cache, selector)
     installed_selector = BrickSelector(selector.brick_type, selector.name, version)
-    info_json = entry["info_json"]
+    info_json = _installed_info_json(entry, installed_selector)
     declared_models = info_json.get("models", {})
     _validate_requested_models(selector.key, declared_models, model_names)
     installed_models = _installed_models(entry)
@@ -119,16 +125,19 @@ def install_models(
         model = declared_models[model_name]
 
         path = model_artifact_path(state_paths, installed_selector, model_name)
-        if not force and _artifact_matches(path, model["sha256"]):
+        state = installed_models.get(model_name)
+        if not force and _installed_artifact_matches(
+            path,
+            state,
+            model["sha256"],
+        ):
             status = "already_installed"
         else:
-            remove_artifact(path)
             path = install_artifact(
                 state_paths,
                 installed_selector,
                 model_name,
-                url=model["url"],
-                ref=model["ref"],
+                sources=model["sources"],
                 expected_sha256=model["sha256"],
                 progress=lambda phase: _report(progress, model_name, phase),
             )
@@ -163,12 +172,12 @@ def uninstall_models(
 
     version, entry = _select_installed_entry(cache, selector)
     installed_selector = BrickSelector(selector.brick_type, selector.name, version)
-    declared_models = entry["info_json"].get("models", {})
+    declared_models = _installed_info_json(entry, installed_selector).get("models", {})
     installed_models = _installed_models(entry)
     items = []
 
     for model_name in model_names:
-        if model_name not in declared_models:
+        if model_name not in declared_models and model_name not in installed_models:
             available = ", ".join(sorted(declared_models)) or "none"
             raise BrickManagerError(
                 f"Unknown model for {selector.key}: {model_name}. "
@@ -244,17 +253,39 @@ def reconcile_installed_models(
     cache: dict[str, Any],
     selector: BrickSelector,
     entry: dict[str, Any],
+    info_json: dict[str, Any],
 ) -> ModelReconcileResult:
-    info_json = entry["info_json"]
     declared_models = info_json.get("models", {})
     installed_models = _collect_installed_models(cache, selector.key)
+    model_root = state_paths.models / selector.brick_type / selector.name
+    model_paths = {}
+    for model_name in installed_models:
+        validate_model_component("name", model_name)
+        model_paths[model_name] = model_artifact_path(
+            state_paths,
+            selector,
+            model_name,
+        )
+    if model_root.is_symlink():
+        remove_artifact(model_root)
+    elif model_root.is_dir():
+        model_paths.update((path.name, path) for path in model_root.iterdir())
     next_installed_models = _installed_models(entry)
     next_installed_models.clear()
 
     removed = []
-    refreshed = []
-    for model_name, state in sorted(installed_models.items()):
-        path = Path(state["path"])
+    incompatible = []
+    for model_name, path in sorted(model_paths.items()):
+        state = installed_models.get(model_name, {})
+        if state.get("origin") == "imported":
+            if imported_model_compatible(path, state, info_json):
+                next_installed_models[model_name] = state
+                continue
+
+            remove_artifact(path)
+            incompatible.append(model_name)
+            continue
+
         model = declared_models.get(model_name)
         if model is None:
             remove_artifact(path)
@@ -266,19 +297,12 @@ def reconcile_installed_models(
             continue
 
         remove_artifact(path)
-        path = install_artifact(
-            state_paths,
-            selector,
-            model_name,
-            url=model["url"],
-            ref=model["ref"],
-            expected_sha256=model["sha256"],
-        )
-        next_installed_models[model_name] = _model_state(path, model)
-        refreshed.append(model_name)
+        incompatible.append(model_name)
 
+    _remove_empty_directory(model_root)
+    _remove_empty_directory(model_root.parent)
     _clear_other_installed_model_state(cache, selector.key, selector.version)
-    return ModelReconcileResult(removed=removed, refreshed=refreshed)
+    return ModelReconcileResult(removed=removed, incompatible=incompatible)
 
 
 def _select_installed_entry(
@@ -365,15 +389,41 @@ def _artifact_matches(path: Path, expected_sha256: str) -> bool:
     if not path.exists():
         return False
     try:
-        return artifact_sha256(path) == expected_sha256
+        return artifact_manifest_sha256(path) == expected_sha256
     except (BrickManagerError, OSError):
         return False
 
 
-def _model_state(path: Path, model: dict[str, str]) -> dict[str, str]:
+def _installed_artifact_matches(
+    path: Path,
+    state: dict[str, str] | None,
+    expected_sha256: str,
+) -> bool:
+    return (
+        state is not None
+        and state.get("origin", "declared") == "declared"
+        and Path(state["path"]) == path
+        and state["sha256"] == expected_sha256
+        and _artifact_matches(path, expected_sha256)
+    )
+
+
+def _installed_info_json(
+    entry: dict[str, Any],
+    selector: BrickSelector,
+) -> dict[str, Any]:
+    return load_installed_entry_info_json(entry, selector)
+
+
+def _installed_source_exists(entry: dict[str, Any]) -> bool:
+    source_path = entry["metadata"].get("installed_source_path")
+    return bool(source_path) and Path(source_path).is_dir()
+
+
+def _model_state(path: Path, model: dict[str, Any]) -> dict[str, str]:
     return {
         "path": str(path),
-        "ref": model["ref"],
+        "ref": model["sources"][0].get("ref", "local"),
         "sha256": model["sha256"],
     }
 

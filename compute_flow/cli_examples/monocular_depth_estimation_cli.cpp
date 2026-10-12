@@ -13,15 +13,17 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <limits>
-#include <stdexcept>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "compute_flow/cli_examples/internal/image.h"
 #include "compute_flow/cli_examples/internal/manifest_selector.h"
+#include "compute_flow/cli_examples/internal/run_config.h"
 #include "compute_flow/cli_examples/internal/thread_config.h"
 #include "compute_flow/compute_flow.h"
 
@@ -35,11 +37,12 @@ constexpr int64_t k_num_channels = 3;
 
 void print_usage(const char* executable) {
     std::fprintf(stderr,
-                 "Usage: %s -m <manifest.json> -i <input_image> [-o <output.png>] "
+                 "Usage: %s -m <manifest.json> (-i <input_image> | -j <runs.json>) [-o <output.png>] "
                  "[-t <thread_spec>]\n\n"
                  "Options:\n"
                  "  -m <manifest.json>     Manifest path or @manifest/... selector.\n"
                  "  -i <input_image>       Image path or @sample/... selector.\n"
+                 "  -j <runs.json>         Input JSON file path for multiple run settings.\n"
                  "  -o <output.png>        Relative-depth visualization path "
                  "(default: ./<input-stem>_relative_depth.png).\n"
                  "  -t <thread_spec>       Default threads and optional model overrides "
@@ -105,12 +108,171 @@ std::vector<uint8_t> colorize_relative_depth(const float* relative_depth, int64_
     return image;
 }
 
+void run_single(std::string manifest_path, const std::string& thread_spec, bool enable_op_profiling,
+                const std::string& input_value, const std::optional<std::string>& output_path) {
+    manifest_path               = internal::get_manifest_path(manifest_path, "monocular_depth_estimation");
+    std::size_t default_threads = 1;
+    const auto model_threads    = internal::parse_hint_cpu_threads(thread_spec, default_threads);
+    auto manifest               = load_manifest(manifest_path);
+
+    internal::set_cpu_threads(manifest, default_threads, model_threads);
+
+    auto brick = load_brick(manifest);
+    BrickOptions options;
+    options.runtime.enable_warmup         = true;
+    options.profiling.enable_op_profiling = enable_op_profiling;
+
+    brick->setup(manifest, options);
+    brick->reset_states();
+
+    const std::string input_path = internal::get_sample_path(input_value, manifest_path);
+    int32_t width                = 0;
+    int32_t height               = 0;
+
+    // Load the image
+    std::vector<float> image =
+        internal::load_rgb_image_chw(input_path, width, height, internal::ImageDecodeMode::NormalizedU8);
+
+    TensorDict input;
+
+    // Set the input
+    input.declare_tensor("image").format = {DataType::F32, {k_num_channels, height, width}};
+    input["image"].data                  = image.data();
+
+    TensorDict output;
+
+    // Run the model inference
+    while (!brick->is_generation_complete()) {
+        output = brick->run(input);
+    }
+
+    const TensorData& relative_depth = output["relative_depth"];
+
+    COMPUTE_FLOW_CHECK(relative_depth.format.dt == DataType::F32 && relative_depth.format.shape.size() == 2 &&
+                       relative_depth.format.shape[0] > 0 && relative_depth.format.shape[1] > 0 &&
+                       relative_depth.format.shape[0] <= std::numeric_limits<int32_t>::max() &&
+                       relative_depth.format.shape[1] <= std::numeric_limits<int32_t>::max());
+
+    const int32_t output_height = static_cast<int32_t>(relative_depth.format.shape[0]);
+    const int32_t output_width  = static_cast<int32_t>(relative_depth.format.shape[1]);
+    std::cout << "Input image resolution: " << width << "x" << height << std::endl;
+    std::cout << "Output image resolution: " << output_width << "x" << output_height << std::endl;
+
+    // Display profiler run
+    brick->write_profile(std::cout);
+
+    if (!output_path.has_value()) {
+        return;
+    }
+
+    const std::string default_input =
+        input_value == input_path ? input_path : std::filesystem::path(input_path).filename().string();
+    const std::string path   = output_path->empty() ? default_output_path(default_input) : *output_path;
+    const int64_t num_pixels = static_cast<int64_t>(output_height) * output_width;
+    const std::vector<uint8_t> visualization =
+        colorize_relative_depth(static_cast<const float*>(relative_depth.data), num_pixels);
+
+    COMPUTE_FLOW_CHECK(stbi_write_png(path.c_str(), output_width, output_height, 3, visualization.data(),
+                                      output_width * 3) != 0);
+
+    std::cout << "Wrote relative-depth visualization to " << path << std::endl;
+}
+
+void run_multiple(std::string manifest_path, const std::string& thread_spec, bool enable_op_profiling,
+                  const std::string& runs_file) {
+    manifest_path               = internal::get_manifest_path(manifest_path, "monocular_depth_estimation");
+    std::size_t default_threads = 1;
+    const auto model_threads    = internal::parse_hint_cpu_threads(thread_spec, default_threads);
+    auto manifest               = load_manifest(manifest_path);
+
+    internal::set_cpu_threads(manifest, default_threads, model_threads);
+
+    auto brick = load_brick(manifest);
+    BrickOptions options;
+    options.runtime.enable_warmup         = true;
+    options.profiling.enable_op_profiling = enable_op_profiling;
+
+    brick->setup(manifest, options);
+
+    const auto run_configs = internal::load_run_configs(runs_file, {"i", "o"}, {"i"});
+
+    for (int64_t run_index = 0; run_index < static_cast<int64_t>(run_configs.size()); ++run_index) {
+        const auto& config = run_configs[static_cast<size_t>(run_index)];
+
+        brick->reset_states();
+
+        const std::string run_id =
+            internal::get_run_value<std::string>(config, "id", std::to_string(run_index + 1), run_index);
+        std::cout << "Run " << run_id << std::endl;
+        const std::optional<std::string> output_path =
+            config.contains("o") ? std::make_optional(internal::get_run_value<std::string>(config, "o", "", run_index))
+                                 : std::nullopt;
+        const std::string input_path = internal::get_run_value<std::string>(config, "i", "", run_index);
+
+        COMPUTE_FLOW_CHECK(!input_path.empty());
+
+        if (output_path.has_value()) {
+            COMPUTE_FLOW_CHECK(!output_path->empty());
+        }
+
+        int32_t width  = 0;
+        int32_t height = 0;
+
+        // Load the image
+        std::vector<float> image =
+            internal::load_rgb_image_chw(input_path, width, height, internal::ImageDecodeMode::NormalizedU8);
+
+        TensorDict input;
+
+        // Set the input
+        input.declare_tensor("image").format = {DataType::F32, {k_num_channels, height, width}};
+        input["image"].data                  = image.data();
+
+        TensorDict output;
+
+        // Run the model inference
+        while (!brick->is_generation_complete()) {
+            output = brick->run(input);
+        }
+
+        const TensorData& relative_depth = output["relative_depth"];
+
+        COMPUTE_FLOW_CHECK(relative_depth.format.dt == DataType::F32 && relative_depth.format.shape.size() == 2 &&
+                           relative_depth.format.shape[0] > 0 && relative_depth.format.shape[1] > 0 &&
+                           relative_depth.format.shape[0] <= std::numeric_limits<int32_t>::max() &&
+                           relative_depth.format.shape[1] <= std::numeric_limits<int32_t>::max());
+
+        const int32_t output_height = static_cast<int32_t>(relative_depth.format.shape[0]);
+        const int32_t output_width  = static_cast<int32_t>(relative_depth.format.shape[1]);
+        std::cout << "Input image resolution: " << width << "x" << height << std::endl;
+        std::cout << "Output image resolution: " << output_width << "x" << output_height << std::endl;
+
+        // Display profiler run
+        brick->write_profile(std::cout);
+
+        if (!output_path.has_value()) {
+            continue;
+        }
+
+        const std::string path   = *output_path;
+        const int64_t num_pixels = static_cast<int64_t>(output_height) * output_width;
+        const std::vector<uint8_t> visualization =
+            colorize_relative_depth(static_cast<const float*>(relative_depth.data), num_pixels);
+
+        COMPUTE_FLOW_CHECK(stbi_write_png(path.c_str(), output_width, output_height, 3, visualization.data(),
+                                          output_width * 3) != 0);
+
+        std::cout << "Wrote relative-depth visualization to " << path << std::endl;
+    }
+}
+
 }  // namespace
 
 int32_t run_cli(int32_t argc, char** argv) {
     std::string manifest_path;
     std::string input_path;
     std::string output_path;
+    std::string json_file;
     std::string thread_spec  = "1";
     bool enable_op_profiling = false;
 
@@ -119,7 +281,7 @@ int32_t run_cli(int32_t argc, char** argv) {
                                     {nullptr, 0, nullptr, 0}};
 
     int32_t option = 0;
-    while ((option = ::getopt_long(argc, argv, "m:i:o:t:h", long_options, nullptr)) != -1) {
+    while ((option = ::getopt_long(argc, argv, "m:i:o:t:j:h", long_options, nullptr)) != -1) {
         switch (option) {
             case 'm':
                 manifest_path = optarg;
@@ -133,6 +295,9 @@ int32_t run_cli(int32_t argc, char** argv) {
             case 't':
                 thread_spec = optarg;
                 break;
+            case 'j':
+                json_file = optarg;
+                break;
             case 1001:
                 enable_op_profiling = true;
                 break;
@@ -145,66 +310,21 @@ int32_t run_cli(int32_t argc, char** argv) {
         }
     }
 
-    if (manifest_path.empty() || input_path.empty()) {
+    if (manifest_path.empty() || (json_file.empty() && input_path.empty()) ||
+        (!json_file.empty() && (!input_path.empty() || !output_path.empty()))) {
         std::fprintf(stderr, "Missing required arguments.\n\n");
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
 
-    manifest_path = internal::get_manifest_path(manifest_path, "monocular_depth_estimation");
-    input_path    = internal::get_sample_path(input_path, manifest_path);
-    if (output_path.empty()) {
-        output_path = default_output_path(input_path);
+    const bool multiple_runs_mode = !json_file.empty();
+
+    if (multiple_runs_mode) {
+        run_multiple(manifest_path, thread_spec, enable_op_profiling, json_file);
+    } else {
+        run_single(manifest_path, thread_spec, enable_op_profiling, input_path, output_path);
     }
 
-    int32_t width  = 0;
-    int32_t height = 0;
-    std::vector<float> image =
-        internal::load_rgb_image_chw(input_path, width, height, internal::ImageDecodeMode::NormalizedU8);
-    std::size_t default_threads = 1;
-    const auto model_threads    = internal::parse_hint_cpu_threads(thread_spec, default_threads);
-    auto manifest               = load_manifest(manifest_path);
-
-    internal::set_cpu_threads(manifest, default_threads, model_threads);
-
-    auto brick = load_brick(manifest);
-    BrickOptions options;
-    options.runtime.enable_warmup         = true;
-    options.profiling.enable_op_profiling = enable_op_profiling;
-    brick->setup(manifest, options);
-    brick->reset_states();
-
-    TensorDict input;
-    input.declare_tensor("image").format = {DataType::F32, {k_num_channels, height, width}};
-    input["image"].data                  = image.data();
-
-    TensorDict output;
-    while (!brick->is_generation_complete()) {
-        output = brick->run(input);
-    }
-    brick->write_profile(std::cout);
-
-    const TensorData& relative_depth = output["relative_depth"];
-    if (relative_depth.format.dt != DataType::F32 || relative_depth.format.shape.size() != 2 ||
-        relative_depth.format.shape[0] <= 0 || relative_depth.format.shape[1] <= 0 ||
-        relative_depth.format.shape[0] > std::numeric_limits<int32_t>::max() ||
-        relative_depth.format.shape[1] > std::numeric_limits<int32_t>::max()) {
-        throw std::runtime_error("Monocular depth-estimation brick returned an unsupported output format");
-    }
-
-    const int32_t output_height = static_cast<int32_t>(relative_depth.format.shape[0]);
-    const int32_t output_width  = static_cast<int32_t>(relative_depth.format.shape[1]);
-    const int64_t num_pixels    = static_cast<int64_t>(output_height) * output_width;
-    const std::vector<uint8_t> visualization =
-        colorize_relative_depth(static_cast<const float*>(relative_depth.data), num_pixels);
-    if (stbi_write_png(output_path.c_str(), output_width, output_height, 3, visualization.data(), output_width * 3) ==
-        0) {
-        throw std::runtime_error("Failed to write relative-depth visualization: " + output_path);
-    }
-
-    std::cout << "Input image resolution: " << width << "x" << height << std::endl;
-    std::cout << "Output image resolution: " << output_width << "x" << output_height << std::endl;
-    std::cout << "Wrote relative-depth visualization to " << output_path << std::endl;
     return EXIT_SUCCESS;
 }
 

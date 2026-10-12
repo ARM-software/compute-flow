@@ -43,16 +43,33 @@ public:
     TensorFormat get_output_format(const std::string& key);
 
 private:
-    struct RuntimeState;
-    void lock_output(size_t idx);
-    void unlock_outputs();
-    size_t find_input_idx_by_name(std::string_view name) const;
-    size_t find_output_idx_by_name(std::string_view name) const;
+    enum class ExecutionMode { CompiledModel, Interpreter };
+    struct CompiledModelState;
+    struct InterpreterState;
+
+    void setup_compiled_model(const ModelData& model, ProfilerView profiler);
+    void setup_interpreter(const ModelData& model, ProfilerView profiler);
+    void run_compiled_model();
+    void run_interpreter();
+    void set_input_compiled_model(const std::string& key, const TensorData& tensor);
+    void set_input_interpreter(const std::string& key, const TensorData& tensor);
+    void reset_states_compiled_model();
+    void reset_states_interpreter();
+    TensorData get_output_compiled_model(const std::string& key);
+    TensorData get_output_interpreter(const std::string& key);
+    void lock_output_compiled_model(size_t idx);
+    void unlock_outputs_compiled_model();
+    size_t find_input_idx_by_name_compiled_model(std::string_view name) const;
+    size_t find_output_idx_by_name_compiled_model(std::string_view name) const;
+    size_t find_input_idx_by_name_interpreter(std::string_view name) const;
+    size_t find_output_idx_by_name_interpreter(std::string_view name) const;
 
     std::string _model_name;
-    ModelData _model_data;
+    ModelData _compiled_model_data;
     ProfilerView _profiler;
-    std::unique_ptr<RuntimeState> _runtime;
+    ExecutionMode _execution_mode {ExecutionMode::CompiledModel};
+    std::unique_ptr<CompiledModelState> _compiled_model;
+    std::unique_ptr<InterpreterState> _interpreter;
     std::vector<TensorData> _inputs;
     std::vector<TensorData> _outputs;
     std::unordered_map<std::string, std::pair<int64_t, int64_t>> _states;

@@ -1,0 +1,32 @@
+{
+    "name": "audio_embedding.v1",
+    "description": "Extracts audio embeddings from a raw mono waveform.",
+    "inputs": {
+        "raw_wav": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_samples"],
+            "description": "Raw mono audio waveform."
+        },
+        "sample_rate": {
+            "index": 1,
+            "dtype": "int64",
+            "shape": [1],
+            "description": "Sample rate of the input waveform in Hz."
+        }
+    },
+    "outputs": {
+        "embedding": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_embeddings", "#embedding_size"],
+            "description": "Audio embedding for each temporal segment of the input waveform."
+        },
+        "frame": {
+            "index": 1,
+            "dtype": "float32",
+            "shape": ["#num_embeddings", 2],
+            "description": "Temporal bounds in seconds for each audio embedding (start, end)."
+        }
+    }
+}

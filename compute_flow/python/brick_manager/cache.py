@@ -85,6 +85,18 @@ def validate_cache(cache: JsonObject) -> None:
                     "Invalid cache: not-installed entries must use installed_source_path: null"
                 )
 
+            installed_info_json = metadata.get("installed_info_json")
+            if installed_info_json is not None and not isinstance(
+                installed_info_json, dict
+            ):
+                raise BrickManagerError(
+                    "Invalid cache: installed_info_json must be an object or null"
+                )
+            if not installed and installed_info_json is not None:
+                raise BrickManagerError(
+                    "Invalid cache: not-installed entries must use installed_info_json: null"
+                )
+
             installed_models = metadata.get("installed_models", {})
             if not isinstance(installed_models, dict):
                 raise BrickManagerError(
@@ -99,7 +111,17 @@ def validate_cache(cache: JsonObject) -> None:
                     raise BrickManagerError(
                         f"Invalid cache: installed model state must be an object: {model_name}"
                     )
-                for field in ("path", "ref", "sha256"):
+                origin = model_state.get("origin", "declared")
+                if origin not in ("declared", "imported"):
+                    raise BrickManagerError(
+                        f"Invalid cache: unsupported model origin: {model_name}.{origin}"
+                    )
+                required_fields = (
+                    ("path", "template", "manifest")
+                    if origin == "imported"
+                    else ("path", "ref", "sha256")
+                )
+                for field in required_fields:
                     if (
                         not isinstance(model_state.get(field), str)
                         or not model_state[field]
@@ -107,4 +129,19 @@ def validate_cache(cache: JsonObject) -> None:
                         raise BrickManagerError(
                             "Invalid cache: installed model state needs "
                             f"{model_name}.{field}"
+                        )
+                if origin == "imported" and not isinstance(
+                    model_state.get("brick"), dict
+                ):
+                    raise BrickManagerError(
+                        f"Invalid cache: imported model state needs {model_name}.brick"
+                    )
+                if origin == "imported" and model_state.get("api") is not None:
+                    if (
+                        not isinstance(model_state["api"], str)
+                        or not model_state["api"]
+                    ):
+                        raise BrickManagerError(
+                            "Invalid cache: imported model API must be a non-empty "
+                            f"string: {model_name}.api"
                         )

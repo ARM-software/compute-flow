@@ -27,6 +27,11 @@ from brick_manager.check import check_environment
 from brick_manager.completion import complete_cli, complete_cli_with_descriptions
 from brick_manager.errors import BrickManagerError
 from brick_manager.install import install_all_bricks, install_brick
+from brick_manager.model_import import import_model, prepare_model_import
+from brick_manager.model_import_interactive import (
+    prompt_model_import,
+    require_interactive_model_import,
+)
 from brick_manager.model_install import (
     install_models,
     uninstall_all_models,
@@ -34,6 +39,11 @@ from brick_manager.model_install import (
     validate_models_for_install,
 )
 from brick_manager.paths import resolve_state_paths
+from brick_manager.registry_commands import (
+    add_registry_source,
+    list_registry_sources,
+    remove_registry_source,
+)
 from brick_manager.render import (
     CONSOLE,
     render_brick_info,
@@ -45,8 +55,12 @@ from brick_manager.render import (
     render_install_all_result,
     render_install_result,
     render_model_install_result,
+    render_model_import_result,
     render_model_uninstall_result,
     render_overview,
+    render_registry_add_result,
+    render_registry_list,
+    render_registry_remove_result,
     render_uninstall_all_result,
     render_uninstall_result,
     render_update_result,
@@ -56,6 +70,15 @@ from brick_manager.update import update_cache
 
 
 _STUB_COMMANDS = ()
+
+
+def _parse_brick_types(value: str) -> list[str]:
+    brick_types = value.split(",")
+    if any(not brick_type for brick_type in brick_types):
+        raise argparse.ArgumentTypeError(
+            "--type requires one or more comma-separated brick types"
+        )
+    return brick_types
 
 
 def _not_implemented(command: str) -> int:
@@ -71,7 +94,22 @@ def _add_brick_parser(
         dest="brick_command", metavar="COMMAND"
     )
 
-    brick_subparsers.add_parser("list", help="List bricks from the local cache")
+    list_parser = brick_subparsers.add_parser(
+        "list", help="List brick variants from the local cache"
+    )
+    list_parser.add_argument(
+        "--type",
+        dest="types",
+        default=[],
+        type=_parse_brick_types,
+        metavar="TYPE[,TYPE...]",
+        help="Brick types to display, separated by commas",
+    )
+    list_parser.add_argument(
+        "--installed",
+        action="store_true",
+        help="Display only installed brick variants",
+    )
 
     info_parser = brick_subparsers.add_parser(
         "info", help="Show cached metadata for one brick"
@@ -97,12 +135,12 @@ def _add_brick_parser(
     install_parser.add_argument("brick", nargs="?", metavar="type:name[@version]")
 
     uninstall_parser = brick_subparsers.add_parser(
-        "uninstall", help="Uninstall one brick version"
+        "uninstall", help="Uninstall one brick and its models"
     )
     uninstall_parser.add_argument(
         "--all",
         action="store_true",
-        help="Uninstall every installed brick source from the local cache",
+        help="Uninstall every installed brick and its models",
     )
     uninstall_parser.add_argument(
         "-y",
@@ -111,6 +149,37 @@ def _add_brick_parser(
         help="Assume yes for uninstall confirmation prompts",
     )
     uninstall_parser.add_argument("brick", nargs="?", metavar="type:name")
+
+
+def _add_registry_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    registry_parser = subparsers.add_parser(
+        "registry", help="Manage brick source registries"
+    )
+    registry_subparsers = registry_parser.add_subparsers(
+        dest="registry_command", metavar="COMMAND", required=True
+    )
+
+    add_parser = registry_subparsers.add_parser(
+        "add", help="Register a Git brick source"
+    )
+    add_parser.add_argument("url", metavar="git-url")
+
+    remove_parser = registry_subparsers.add_parser(
+        "remove", help="Remove a registered brick source"
+    )
+    remove_parser.add_argument("source", metavar="source")
+
+    list_parser = registry_subparsers.add_parser(
+        "list", help="List configured brick sources"
+    )
+
+    for command_parser in (add_parser, remove_parser, list_parser):
+        command_parser.add_argument(
+            "--registry",
+            help="Use only this registry.txt source list",
+        )
 
 
 def _add_model_parser(
@@ -144,6 +213,19 @@ def _add_model_parser(
     )
     model_install_parser.add_argument("brick", metavar="type:name")
     model_install_parser.add_argument("models", nargs="+", metavar="model")
+    model_import_parser = model_subparsers.add_parser(
+        "import",
+        help=(
+            "Create a managed model from external artifacts using a supported "
+            "model as a template"
+        ),
+    )
+    model_import_parser.add_argument(
+        "--force", action="store_true", help="Replace an existing managed model"
+    )
+    model_import_parser.add_argument("brick", metavar="type:name")
+    model_import_parser.add_argument("template_model", metavar="template-model")
+    model_import_parser.add_argument("new_model_name", metavar="new-model-name")
     model_uninstall_parser = model_subparsers.add_parser(
         "uninstall", help="Uninstall models for the installed brick version"
     )
@@ -184,7 +266,7 @@ def _add_build_parser(
     build_parser.add_argument(
         "--from-source",
         action="store_true",
-        help="Build runtime dependencies from source without Conan",
+        help="Build runtime dependencies from source instead of release archives",
     )
     build_parser.add_argument(
         "--streamline",
@@ -201,6 +283,7 @@ def build_parser() -> argparse.ArgumentParser:
         "update", help="Refresh the local brick registry cache"
     )
     update_parser.add_argument("--registry", help="Path to a registry.txt source list")
+    _add_registry_parser(subparsers)
     _add_brick_parser(subparsers)
     _add_model_parser(subparsers)
     _add_build_parser(subparsers)
@@ -267,6 +350,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(error, file=sys.stderr)
             return 1
         render_update_result(result)
+        return 0
+
+    if args.command == "registry":
+        state_paths = resolve_state_paths()
+        try:
+            if args.registry_command == "add":
+                result = add_registry_source(
+                    state_paths, args.url, registry=args.registry
+                )
+                render_registry_add_result(result)
+            elif args.registry_command == "remove":
+                result = remove_registry_source(
+                    state_paths, args.source, registry=args.registry
+                )
+                render_registry_remove_result(result)
+            else:
+                sources = list_registry_sources(state_paths, registry=args.registry)
+                render_registry_list(sources)
+        except BrickManagerError as error:
+            print(error, file=sys.stderr)
+            return 1
         return 0
 
     if args.command == "build":
@@ -346,13 +450,50 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.models,
                     force=args.force,
                 )
-                model_list = get_brick_model_list(state_paths, result.identity)
+                model_list = get_brick_model_list(state_paths, installed_brick)
             except BrickManagerError as error:
                 print(error, file=sys.stderr)
                 return 1
             render_install_result(brick_result)
             render_model_install_result(result)
             render_brick_model_list([model_list])
+            return 0
+        if args.model_command == "import":
+            try:
+                require_interactive_model_import()
+                preparation = prepare_model_import(
+                    state_paths,
+                    args.brick,
+                    args.template_model,
+                    args.new_model_name,
+                    force=args.force,
+                )
+                choices = prompt_model_import(preparation)
+                selected_brick = f"{preparation.brick}@{preparation.version}"
+                brick_result = install_brick(state_paths, selected_brick)
+
+                def report(phase: str, artifact: str | None) -> None:
+                    messages = {
+                        "creating_manifest": "Creating manifest...",
+                        "fetching_template": "Fetching template package...",
+                        "installing": "Installing imported model...",
+                    }
+                    if phase in ("copying", "downloading"):
+                        print(f"{phase.title()} model artifact '{artifact}'...")
+                    else:
+                        print(messages[phase])
+
+                result = import_model(
+                    state_paths,
+                    preparation,
+                    choices,
+                    progress=report,
+                )
+            except (BrickManagerError, OSError) as error:
+                print(error, file=sys.stderr)
+                return 1
+            render_install_result(brick_result)
+            render_model_import_result(result)
             return 0
         if args.model_command == "uninstall":
             if args.all == bool(args.models):
@@ -364,7 +505,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     result = uninstall_all_models(state_paths, args.brick)
                 else:
                     result = uninstall_models(state_paths, args.brick, args.models)
-                model_list = get_brick_model_list(state_paths, result.identity)
+                installed_brick = result.identity.rsplit("@", maxsplit=1)[0]
+                model_list = get_brick_model_list(state_paths, installed_brick)
             except BrickManagerError as error:
                 print(error, file=sys.stderr)
                 return 1
@@ -372,7 +514,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             render_brick_model_list([model_list])
             return 0
         parser.error(
-            "compute-flow model requires a command: list, info, path, install, or uninstall"
+            "compute-flow model requires a command: list, info, path, import, "
+            "install, or uninstall"
         )
 
     if args.brick_command is None:
@@ -381,11 +524,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.brick_command == "list":
         try:
-            summaries = get_brick_summaries(state_paths)
+            summaries = get_brick_summaries(
+                state_paths,
+                args.types,
+                installed_only=args.installed,
+            )
         except BrickManagerError as error:
             print(error, file=sys.stderr)
             return 1
-        render_brick_list(summaries)
+        render_brick_list(
+            summaries, brick_types=args.types, installed_only=args.installed
+        )
         return 0
 
     if args.brick_command == "info":

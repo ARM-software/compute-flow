@@ -61,7 +61,7 @@ endfunction()
 # ---- compute_flow_extract_target_archives -------------------------------------------------
 # Extracts archive paths from an IMPORTED target for monolithic archive declaration.
 # Reads IMPORTED_LOCATION and collects .a/.lib paths from INTERFACE_LINK_LIBRARIES.
-# Used by dep modules in the find_package (Conan) path to populate
+# Used by dep modules in the find_package (prebuilt) path to populate
 # COMPUTE_FLOW_<DEP>_MONOLITHIC_ARCHIVES.
 #
 # Usage:

@@ -1,0 +1,26 @@
+{
+    "name": "image_segmentation.v1",
+    "description": "Assigns one semantic class to each pixel of an RGB image.",
+    "inputs": {
+        "image": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_channels", "#input_height", "#input_width"],
+            "description": "RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue."
+        }
+    },
+    "outputs": {
+        "mask": {
+            "index": 0,
+            "dtype": "int32",
+            "shape": ["#input_height", "#input_width"],
+            "description": "One class ID per input pixel, in row-major order. IDs are zero-based row indices into class_name; variants must remap sparse model IDs."
+        },
+        "class_name": {
+            "index": 1,
+            "dtype": "uint8",
+            "shape": ["#num_classes", "#max_name_length"],
+            "description": "UTF-8 class names indexed by mask class ID, padded with zero bytes. Names are not required to be unique."
+        }
+    }
+}

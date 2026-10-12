@@ -1,0 +1,46 @@
+{
+  "name": "Nemotron3Diarization",
+  "type": "audio_detection",
+  "api": "audio_detection.v1",
+  "description": "Identify who speaks when in audio, including overlapping speakers.",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "deps": [
+    "nlohmann_json"
+  ],
+  "models": {
+    "nemotron-3-diarization-fp32": {
+      "description": "Speaker diarization for up to eight speakers, including overlapping speech.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/nemotron-3-diarization-mix-frameworks-fp32",
+          "ref": "9844bc7c39a62162e9f4876eb6a0fecf56f8bf20"
+        }
+      ],
+      "sha256": "6f2a236a27d560578c7918ff36c4324ecf57b39e836f0ceb4246fdf0842855ed"
+    },
+    "nemotron-3-diarization-litert-fp32": {
+      "description": "Speaker diarization for up to eight speakers with fp32.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/nemotron-3-diarization-litert-fp32",
+          "ref": "d38175d13cbe1376c1ec77c9a5c3a4499ee44b30"
+        }
+      ],
+      "sha256": "7bec91671b90f85b20f318846a21a6eaee219b24a97d1b2d382d4b703cff1780"
+    },
+    "nemotron-3-diarization-litert-int8": {
+      "description": "Speaker diarization for up to eight speakers with int8.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/nemotron-3-diarization-litert-int8",
+          "ref": "6cd83e1e55b94a414f53199f07aebdd4312d0bd8"
+        }
+      ],
+      "sha256": "ad9556d5d31e3a945475b6648db5af944b45615cf7dba59dcee10cb5e54e2185"
+    }
+  }
+}

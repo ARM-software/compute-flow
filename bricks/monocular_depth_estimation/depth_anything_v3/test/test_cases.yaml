@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+models:
+  da3-small-litert-fp16-compute:
+    da3_small_manifest.json:
+      - args: ["-i", "@sample/000.png", "-o", "depth_anything_v3_relative_depth.png", "-t", "2"]

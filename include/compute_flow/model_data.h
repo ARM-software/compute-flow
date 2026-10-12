@@ -25,7 +25,8 @@ enum class RunnerType {
     HuggingFaceTokenizer = 3,
     ONNXRT = 4,
     MNN = 5,
-    Unknown = 6
+    SentencePieceDecode = 6,
+    Unknown = 7
 };
 
 enum class LMRunnerType { Llama_cpp, Unknown };

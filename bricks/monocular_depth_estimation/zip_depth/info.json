@@ -1,0 +1,22 @@
+{
+  "name": "ZipDepth",
+  "type": "monocular_depth_estimation",
+  "api": "monocular_depth_estimation.v1",
+  "description": "Monocular relative depth estimation using ZipDepth",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "deps": [],
+  "models": {
+    "zipdepth-base-executorch-fp16": {
+      "description": "ZipDepth Base FP16 ExecuTorch model.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/zipdepth-fp16-executorch",
+          "ref": "2279010553ca83eb537a89c34fca0a9da012cff0"
+        }
+      ],
+      "sha256": "cfabaec6d091003d73cafade69d1a2149f86d0a622755389ef22faa32e4c8891"
+    }
+  }
+}

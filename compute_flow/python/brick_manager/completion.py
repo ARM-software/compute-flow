@@ -18,9 +18,10 @@ from brick_manager.identity import parse_brick_selector
 from brick_manager.paths import StatePaths
 
 
-_TOP_LEVEL_COMMANDS = ("build", "brick", "check", "model", "update")
+_TOP_LEVEL_COMMANDS = ("build", "brick", "check", "model", "registry", "update")
 _BRICK_COMMANDS = ("info", "install", "list", "path", "uninstall")
-_MODEL_COMMANDS = ("info", "install", "list", "path", "uninstall")
+_MODEL_COMMANDS = ("import", "info", "install", "list", "path", "uninstall")
+_REGISTRY_COMMANDS = ("add", "list", "remove")
 _BUILD_TARGETS = ("android_arm64", "linux_arm64", "list", "native")
 _BUILD_OPTIONS = ("--from-source", "--jobs", "-j")
 
@@ -36,6 +37,8 @@ def complete_cli(state_paths: StatePaths, words: Sequence[str]) -> list[str]:
         return _complete_brick_command(state_paths, previous[1:], current)
     if command == "model":
         return _complete_model_command(state_paths, previous[1:], current)
+    if command == "registry":
+        return _complete_registry_command(previous[1:], current)
     if command == "build":
         return _complete_build_command(previous[1:], current)
     if command == "update" and current.startswith("-"):
@@ -51,6 +54,16 @@ def _complete_build_command(previous: list[str], current: str) -> list[str]:
     if any(word in _BUILD_TARGETS for word in previous):
         return _matching(_BUILD_OPTIONS, current) if not current else []
     return _matching(_BUILD_TARGETS, current)
+
+
+def _complete_registry_command(previous: list[str], current: str) -> list[str]:
+    if not previous:
+        return _matching(_REGISTRY_COMMANDS, current)
+    if previous[0] not in _REGISTRY_COMMANDS or previous[-1] == "--registry":
+        return []
+    if current.startswith("-") or current == "":
+        return _matching(("--registry",), current)
+    return []
 
 
 def complete_cli_with_descriptions(
@@ -73,16 +86,30 @@ def _complete_brick_command(
     command = previous[0]
     if command not in _BRICK_COMMANDS:
         return []
-
     options = {
+        "list": ("--installed", "--type"),
         "install": ("--all", "--force"),
         "uninstall": ("--all", "--yes", "-y"),
     }.get(command, ())
+    if command == "list" and current.startswith("--type="):
+        if any(word == "--type" or word.startswith("--type=") for word in previous[1:]):
+            return []
+        return _complete_brick_types(
+            _load_cache(state_paths),
+            current,
+        )
     if current.startswith("-"):
         return _matching(options, current)
 
     positionals = _positionals(previous[1:], options)
-    if command == "list" or positionals:
+    if command == "list":
+        if previous[-1] == "--type":
+            return _complete_brick_types(
+                _load_cache(state_paths),
+                current,
+            )
+        return [] if positionals else _matching(options, current)
+    if positionals:
         return []
     if "--all" in previous:
         return []
@@ -94,6 +121,30 @@ def _complete_brick_command(
         installed_only=command in ("path", "uninstall"),
         allow_versions=command in ("info", "install"),
     )
+
+
+def _complete_brick_types(
+    cache: dict[str, Any],
+    current: str,
+) -> list[str]:
+    option_prefix = ""
+    current_value = current
+    if current.startswith("--type="):
+        option_prefix = "--type="
+        current_value = current.removeprefix(option_prefix)
+
+    value_prefix, separator, type_prefix = current_value.rpartition(",")
+    completed_prefix = f"{value_prefix}{separator}"
+    excluded = set(value_prefix.split(",") if value_prefix else ())
+    brick_types = {
+        key.partition(":")[0]
+        for key in cache.get("bricks", {})
+        if key.partition(":")[0] not in excluded
+    }
+    return [
+        f"{option_prefix}{completed_prefix}{brick_type}"
+        for brick_type in _matching(brick_types, type_prefix)
+    ]
 
 
 def _complete_model_command(
@@ -109,6 +160,7 @@ def _complete_model_command(
         return []
 
     options = {
+        "import": ("--force",),
         "install": ("--force",),
         "uninstall": ("--all",),
     }.get(command, ())
@@ -132,6 +184,12 @@ def _complete_model_command(
             installed_only=command in ("info", "path", "uninstall"),
             require_models=True,
         )
+
+    if command == "import":
+        if len(positionals) == 1:
+            models = _models_for_command(cache, positionals[0], command)
+            return _matching(models, current)
+        return []
 
     if command == "uninstall" and "--all" in previous:
         return []
@@ -188,16 +246,33 @@ def _models_for_command(
     if not versions:
         return []
 
-    if command == "install":
+    if command in ("import", "install"):
         entry = _selected_entry(cache, brick)
     else:
         entry = _installed_entry(versions)
     if entry is None:
         return []
 
-    if command in ("path", "uninstall"):
-        return sorted(entry["metadata"].get("installed_models", {}))
-    return sorted(entry["info_json"].get("models", {}))
+    installed_models = entry["metadata"].get("installed_models", {})
+    if command == "import":
+        return sorted(_entry_info_json(entry).get("models", {}))
+    if command == "uninstall":
+        return sorted(installed_models)
+
+    declared_models = _entry_info_json(entry).get("models", {})
+    if command == "path":
+        return sorted(
+            model_name
+            for model_name, state in installed_models.items()
+            if (
+                state.get("origin") == "imported"
+                or (
+                    model_name in declared_models
+                    and state.get("sha256") == declared_models[model_name]["sha256"]
+                )
+            )
+        )
+    return sorted(declared_models)
 
 
 def _model_descriptions_for_completion(
@@ -208,10 +283,11 @@ def _model_descriptions_for_completion(
         return {}
 
     command = previous[1]
-    if command not in ("info", "install", "path", "uninstall"):
+    if command not in ("import", "info", "install", "path", "uninstall"):
         return {}
 
     options = {
+        "import": ("--force",),
         "install": ("--force",),
         "uninstall": ("--all",),
     }.get(command, ())
@@ -226,13 +302,13 @@ def _model_descriptions_for_completion(
 
     entry = (
         _selected_entry(cache, positionals[0])
-        if command == "install"
+        if command in ("import", "install")
         else _installed_entry(versions)
     )
     if entry is None:
         return {}
 
-    declared_models = entry["info_json"].get("models", {})
+    declared_models = _entry_info_json(entry).get("models", {})
     if command in ("path", "uninstall"):
         model_names = entry["metadata"].get("installed_models", {})
     else:
@@ -256,7 +332,22 @@ def _selected_models(
     )
     if entry is None:
         return {}
-    return entry["info_json"].get("models", {})
+    declared_models = _entry_info_json(entry).get("models", {})
+    if installed_only:
+        imported_models = {
+            name: {}
+            for name, state in entry["metadata"].get("installed_models", {}).items()
+            if state.get("origin") == "imported"
+        }
+        return declared_models | imported_models
+    return declared_models
+
+
+def _entry_info_json(entry: dict[str, Any]) -> dict[str, Any]:
+    metadata = entry["metadata"]
+    if metadata.get("installed", False):
+        return metadata.get("installed_info_json") or entry["info_json"]
+    return entry["info_json"]
 
 
 def _selected_entry(cache: dict[str, Any], brick: str) -> dict[str, Any] | None:

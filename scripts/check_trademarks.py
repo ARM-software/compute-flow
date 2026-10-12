@@ -23,6 +23,9 @@ LEGAL_ENTITIES = ("Arm Limited", "Raspberry Pi Ltd")  # trademark-check: allow
 LEGAL_NOTICE_PATTERN = re.compile(
     r"\b(?:registered trademark|trademark of)\b", re.IGNORECASE
 )
+BIBTEX_ORGANIZATION_PATTERN = re.compile(
+    r'^\s*organization\s*=\s*(?:\{[^}]*\}|"[^"]*")\s*,?\s*$'
+)
 HUNK_PATTERN = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
@@ -129,6 +132,7 @@ def _mask_allowed_uses(text: str) -> str:
     machine_patterns = (
         rf"\bCMAKE_SYSTEM_NAME\s*(?:=|\s+STREQUAL\s+)[\"']?(?:{machine_names})[\"']?",
         rf"\bos=(?:{machine_names})\b",
+        rf"[\"']os[\"']\s*:\s*[\"'](?:{machine_names})[\"']",
         rf"(?:system|platform\.system\(\))\s*(?:==|!=)\s*[\"'](?:{machine_names})[\"']",
         rf"set\(CMAKE_SYSTEM_NAME\s+(?:{machine_names})\)",
     )
@@ -143,7 +147,11 @@ def _violations(
 ) -> list[str]:
     if allow_marker and ALLOW_MARKER in text:
         return []
-    if "SPDX-FileCopyrightText:" in text or LEGAL_NOTICE_PATTERN.search(text):
+    if (
+        "SPDX-FileCopyrightText:" in text
+        or LEGAL_NOTICE_PATTERN.search(text)
+        or BIBTEX_ORGANIZATION_PATTERN.fullmatch(text)
+    ):
         return []
 
     masked = _mask_allowed_uses(text)

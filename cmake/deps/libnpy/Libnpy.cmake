@@ -15,7 +15,7 @@ set(COMPUTE_FLOW_LIBNPY_VERSION "1.0.1")
 set(COMPUTE_FLOW_LIBNPY_URL "https://github.com/llohse/libnpy/archive/refs/tags/v${COMPUTE_FLOW_LIBNPY_VERSION}.zip")
 set(COMPUTE_FLOW_LIBNPY_URL_HASH "SHA256=3c9864c1bf7af08c88f2056478a2c6d2539674673bab9f9b4a0042a84a857f19")
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ---- Try pre-installed (release / system) --------------------------------------------------
 find_package(libnpy CONFIG QUIET)
 if(libnpy_FOUND AND TARGET libnpy::libnpy)
     message(STATUS "libnpy: found pre-installed")

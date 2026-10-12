@@ -23,7 +23,6 @@
 # CMakeLists.txt to link against.
 #
 # Requires Python3 with torch and PyYAML installed (provided by uv sync).
-# Applies patches from PatchExecuTorch.cmake.
 #
 # Resolution: find_package → ExternalProject (gated by from-source flag)
 # =========================================================================================
@@ -32,9 +31,13 @@ include_guard(GLOBAL)
 
 # ---- Source coordinates (change version/tag here) ----------------------------------------
 set(COMPUTE_FLOW_EXECUTORCH_GIT_REPO "https://github.com/pytorch/executorch.git")
-set(COMPUTE_FLOW_EXECUTORCH_GIT_TAG "d13c78971338b35a219e0a27f7045b29c7f4e8c1")
+set(COMPUTE_FLOW_EXECUTORCH_GIT_TAG "f7140a46ff38e919c557d45b102d3ff26097c8c9") # v1.5.0
 
-# ---- Try pre-installed (Conan / system) --------------------------------------------------
+# ExecuTorch v1.5 installs this optional runtime even though the selected targets do not link it.
+# Keep it out of the broad archive glob used to assemble the Compute Flow monolithic library.
+set(COMPUTE_FLOW_EXECUTORCH_MONOLITHIC_EXCLUDE "libflatccrt.a")
+
+# ---- Try pre-installed (release / system) --------------------------------------------------
 if(NOT COMPUTE_FLOW_BUILD_EXECUTORCH_FROM_SOURCE)
     find_package(executorch CONFIG QUIET)
 
@@ -129,8 +132,6 @@ ExternalProject_Add(
     GIT_PROGRESS TRUE
     GIT_SUBMODULES_RECURSE ON
     UPDATE_DISCONNECTED ON
-    PATCH_COMMAND
-        ${CMAKE_COMMAND} -DEXECUTORCH_SOURCE_DIR:PATH=<SOURCE_DIR> -P ${CMAKE_CURRENT_LIST_DIR}/PatchExecuTorch.cmake
     CMAKE_ARGS
         ${COMPUTE_FLOW_EP_COMMON_CMAKE_ARGS} -DBUILD_SHARED_LIBS:BOOL=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
         -DPython3_EXECUTABLE:FILEPATH=${Python3_EXECUTABLE}
@@ -142,6 +143,10 @@ ExternalProject_Add(
         -DEXECUTORCH_BUILD_XNNPACK=ON -DEXECUTORCH_XNNPACK_ENABLE_KLEIDI=ON
     BUILD_BYPRODUCTS <BINARY_DIR>/libexecutorch.a <BINARY_DIR>/libexecutorch_core.a
     INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
+    # ExecuTorch does not install its BSD-3-Clause license. Binary redistributions must retain the
+    # license notice, so copy the exact upstream file into the release prefix.
+    COMMAND ${CMAKE_COMMAND} -E make_directory <INSTALL_DIR>/share/licenses/executorch
+    COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/LICENSE <INSTALL_DIR>/share/licenses/executorch/LICENSE
 )
 
 set(COMPUTE_FLOW_EXECUTORCH_INSTALL_DIR "${executorch_install_dir}")
