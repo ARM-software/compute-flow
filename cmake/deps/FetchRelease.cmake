@@ -8,14 +8,30 @@ cmake_minimum_required(VERSION 3.24)
 
 # Run separately so download/extraction errors can trigger the source-build fallback.
 # Bound each mirror attempt so a stalled download cannot block the next source.
-file(
-    DOWNLOAD "${archive_url}"
-    "${prefix}.tar.gz"
-    EXPECTED_HASH "SHA256=${sha256}"
-    TLS_VERIFY ON
-    INACTIVITY_TIMEOUT 30
-    TIMEOUT 600
-)
+if(archive_url MATCHES "^git-lfs://([^/]+)/([^/]+)/([^/]+)/([^/]+)$")
+    execute_process(
+        COMMAND
+            "${python_executable}" "${CMAKE_CURRENT_LIST_DIR}/../../scripts/fetch_lfs_prebuilt.py" --remote
+            "${CMAKE_MATCH_1}" --commit "${CMAKE_MATCH_2}" --profile "${CMAKE_MATCH_3}" --filename "${CMAKE_MATCH_4}"
+            --sha256 "${sha256}" --output "${prefix}.tar.gz"
+        COMMAND_ERROR_IS_FATAL ANY
+        TIMEOUT 600
+    )
+else()
+    file(
+        DOWNLOAD "${archive_url}"
+        "${prefix}.tar.gz"
+        EXPECTED_HASH "SHA256=${sha256}"
+        TLS_VERIFY ON
+        INACTIVITY_TIMEOUT 30
+        TIMEOUT 600
+    )
+endif()
+# LFS and HTTP archives must match the same manifest before extraction.
+file(SHA256 "${prefix}.tar.gz" actual_sha256)
+if(NOT actual_sha256 STREQUAL sha256)
+    message(FATAL_ERROR "Release archive SHA256 mismatch: ${archive_url}")
+endif()
 # CMake versions before 4.3 do not reject absolute or parent-traversal entry paths.
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -E tar tf "${prefix}.tar.gz"
