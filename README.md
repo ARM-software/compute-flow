@@ -4,17 +4,7 @@
     SPDX-License-Identifier: Apache-2.0
 -->
 
-<div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/imgs/compute_flow_logo_text_dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="docs/imgs/compute_flow_logo_text_light.png" />
-    <img src="docs/imgs/compute_flow_logo_text_light.png" width="650" alt="Compute Flow logo" />
-  </picture>
-</div>
-
 # Compute Flow
-
-[English](README.md) | [简体中文](README_zh-CN.md)
 
 Compute Flow is an SDK for building AI and GenAI applications from reusable building blocks called
 **bricks**.
@@ -22,21 +12,25 @@ Compute Flow is an SDK for building AI and GenAI applications from reusable buil
 Compute Flow brings together inference runtimes such as LiteRT, ExecuTorch, ONNX Runtime, and
 llama.cpp so new bricks can be created without depending directly on each runtime API. It is
 designed for Arm® edge AI inference across platforms, including **Android™**, **Linux®**, and
-**macOS®** targets. It does not support microcontrollers.
+**macOS®** targets. Microcontrollers are not yet supported.
+
+## Project Status
+
+Compute Flow is a prototype, so APIs and functionality may change. We welcome feedback and issue
+reports.
 
 ## What can you do with Compute Flow?
 
-Compute Flow helps you build sophisticated on-device AI applications by:
+Compute Flow helps you build on-device AI applications by:
 
 1. [**Discovering, installing, and testing bricks**](docs/howto/getting_started.md)
 
-   Use Brick Manager to find, install, and try ready-to-use AI bricks directly from your terminal.
-   Add speech recognition, language models, text-to-speech, object detection, and more in just a few
-   commands.
+   With Brick Manager, you can discover, install, and test bricks for speech recognition, language
+   models, text-to-speech, and object detection.
 
-2. [**Building sophisticated AI pipelines**](docs/examples/python/audio_to_audio_translation.md)
+2. [**Building AI pipelines**](docs/examples/python/audio_to_audio_translation.md)
 
-   Combine multiple bricks to create complete AI experiences. For example, build an audio-to-audio
+   Combine multiple bricks into AI processing pipelines. For example, build an audio-to-audio
    translation pipeline in Python by connecting speech-to-text, translation, and text-to-speech
    bricks.
 
@@ -120,9 +114,8 @@ For a full native and Android™ walkthrough, see the
 
 ### Using bricks from the open source community
 
-Compute Flow includes pre-packaged bricks to help developers get started. We believe more
-intelligent applications emerge when developers share their work, so Compute Flow was designed from
-day one to make community-developed bricks easy to use.
+In addition to the pre-packaged bricks included with Compute Flow, you can install community-developed
+bricks from Git repositories.
 
 To add a community Git repository and install one of its brick models, run:
 
@@ -163,33 +156,16 @@ Other development, design, and reference documents are listed in the
 
 ## Support
 
-For help or feedback, please reach out via the project’s issue tracker or contact the maintainers
-directly.
+For help, bug reports, or feature requests, please
+[open an issue](https://github.com/ARM-software/ComputeFlow/issues).
 
 ## Contributing
 
-Compute Flow is evolving rapidly, so contributions to the `compute_flow` core are not currently
-accepted. Ideas, feature requests, issue reports, and other feedback are welcome. See the
-[contribution guidelines](CONTRIBUTING.md) for details.
+We are not currently accepting contributions to the `compute_flow` core, but we welcome ideas,
+feature requests, issue reports, and other feedback through the project's
+[issue tracker](https://github.com/ARM-software/ComputeFlow/issues).
 
-## Authors
-
-- **Gian Marco Iodice** (*gianmarco.iodice@arm.com*), Distinguished Engineer (CE-ML), Cambridge
-
-- **Jakub Sujak** (*jakub.sujak@arm.com*), Senior Software Engineer (CE-ML), Cambridge
-
-- **Yunus Kalkan** (*yunus.kalkan@arm.com*), Senior Software Engineer (STE), Cambridge
-
-- **Adnan AlSinan** (*adnan.alsinan@arm.com*), Senior Software Engineer (CE-ML), Cambridge
-
-## Acknowledgments
-
-We gratefully acknowledge (in alphabetical order) **Abbey Noble**, **Aliyha Ajmal**, **Anand
-Kakad**, **Anitha Raj**, **Anton Kachatkou**, **Aude Vuilliomenet**, **Carey Williams**, **Charlotte
-Chen**, **Declan Cox**, **Evie Wright**, **Govind Narasimman**, **Joe Alderson**, **Kshitij
-Sisodia**, **Marlon Jacobs**, **Maurice De Vries**, **Murad Almakhzangi**, **Nina Drozd**, **Ronan
-Naughton**, and **Sicong Li** for their contributions, support, and valuable feedback on this
-project.
+See the [contribution guidelines](CONTRIBUTING.md) for details.
 
 ## Trademarks
 
@@ -202,23 +178,3 @@ Compute Flow is licensed under the [Apache License 2.0](LICENSES/Apache-2.0.txt)
 
 Third-party components remain subject to their respective licenses. See
 [third-party notices](THIRD_PARTY_NOTICES.md) for the direct dependency inventory.
-
-## Citation
-
-If you use this project in your work, please cite it as:
-
-```bibtex
-@software{compute-flow,
-  author  = {Iodice, Gian Marco and Sujak, Jakub and Kalkan, Yunus and AlSinan, Adnan},
-  title   = {compute-flow: a cross-platform SDK to streamline the creation of AI applications at the Edge},
-  url     = {https://github.com/ARM-software/ComputeFlow},
-  year    = {2026},
-  organization = {Arm},
-  address = {Cambridge, United Kingdom},
-}
-```
-
-## Project Status
-
-⚠️ This project is currently a prototype. Development is very active, but APIs and functionality may
-change. Ideas, issue reports, and feedback are highly encouraged!
