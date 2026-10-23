@@ -56,9 +56,10 @@ endif()
 
 set(COMPUTE_FLOW_CLI_SMOKE_TARGETS
     audio_detection_cli
-    audio_enhancement_cli
-    audiogen_cli
-    image_edit_cli
+    audio_to_audio_cli
+    audio_generation_cli
+    image_to_image_cli
+    image_generation_cli
     image_classification_cli
     image_segmentation_cli
     lm_text_cli

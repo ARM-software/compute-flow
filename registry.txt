@@ -1,11 +1,13 @@
+bricks/audio_tool_calling/neu_decide
 bricks/audio_detection/nemotron3_diarization
 bricks/audio_detection/perch
-bricks/audio_enhancement/ulunas
+bricks/audio_to_audio/ulunas
 bricks/monocular_depth_estimation/depth_anything_v3
 bricks/monocular_depth_estimation/zip_depth
 bricks/lm_text/lm_text_generic
 bricks/object_detection/yolo
 bricks/stt/moonshine
+bricks/stt/nemotron_asr
 bricks/stt/parakeet_tdt
 bricks/tts/pocket_tts
 bricks/tts/qwen3_tts

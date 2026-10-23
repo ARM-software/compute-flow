@@ -1,0 +1,24 @@
+{
+  "name": "NeuDecide",
+  "type": "audio_tool_calling",
+  "api": "audio_tool_calling.v1",
+  "description": "Generates structured tool calls from spoken requests.",
+  "author": "Arm Limited",
+  "version": "1.0.0",
+  "deps": [
+    "nlohmann_json"
+  ],
+  "models": {
+    "neudecide-en": {
+      "description": "English spoken requests for common assistant tasks.",
+      "sources": [
+        {
+          "kind": "huggingface",
+          "url": "https://huggingface.co/Arm/neudecide-int4-executorch",
+          "ref": "2db846c4a7eedf9e53faae44451f6b89975671bf"
+        }
+      ],
+      "sha256": "11d5c3ec9383fefffcd745ba9134d7ab57c2dbb3c9e778e142a81e52edaa07f5"
+    }
+  }
+}

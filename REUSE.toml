@@ -1,0 +1,49 @@
+#
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+version = 1
+
+# Structured data.
+[[annotations]]
+path = "**/*.json"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Images.
+[[annotations]]
+path = ["**/*.png", "**/*.gif"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Generated files.
+[[annotations]]
+path = ["**/uv.lock", "**/SHA256SUMS"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Brick registry.
+[[annotations]]
+path = "**/registry.txt"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Agent support.
+[[annotations]]
+path = ".agents/skills/**/SKILL.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Metadata.
+[[annotations]]
+path = "**/*.patch"
+precedence = "override"
+SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"

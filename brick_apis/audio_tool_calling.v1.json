@@ -1,0 +1,42 @@
+{
+    "name": "audio_tool_calling.v1",
+    "description": "Converts a raw mono audio waveform into zero or more structured tool calls.",
+    "inputs": {
+        "raw_wav": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#num_samples"],
+            "description": "Raw mono audio waveform."
+        },
+        "sample_rate": {
+            "index": 1,
+            "dtype": "int64",
+            "shape": [1],
+            "description": "Sample rate of the input waveform in Hz."
+        }
+    },
+    "outputs": {
+        "calls": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "One UTF-8 string containing a JSON array of tool calls in generation order. Returns [] when no tool is called.",
+            "json_schema": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "arguments": {
+                            "type": "object"
+                        }
+                    },
+                    "required": ["name", "arguments"],
+                    "additionalProperties": false
+                }
+            }
+        }
+    }
+}

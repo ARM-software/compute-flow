@@ -35,8 +35,8 @@ void set_manifest_constants(
  * @brief Brick metadata parsed from the manifest.
  */
 struct BrickInfo {
-    std::string type;    ///< Internal brick type (e.g., "audiogen").
-    std::string name;    ///< Brick name from info.json (e.g., "StableAudioOpenSmall").
+    std::string type;    ///< Internal brick type (e.g., "audio_generation").
+    std::string name;    ///< Brick name from info.json.
     bricks::BrickVersion version; ///< Brick manifest version (MAJOR.MINOR).
 };
 

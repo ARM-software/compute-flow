@@ -1,0 +1,20 @@
+{
+    "name": "image_generation.v1",
+    "description": "Generates an RGB image from a text prompt.",
+    "inputs": {
+        "prompt": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "Text prompt describing the image to generate."
+        }
+    },
+    "outputs": {
+        "image": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": [3, "#output_height", "#output_width"],
+            "description": "Generated RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue. Output height and width are positive."
+        }
+    }
+}

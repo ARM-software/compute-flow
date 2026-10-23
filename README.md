@@ -114,8 +114,8 @@ For a full native and Android™ walkthrough, see the
 
 ### Using bricks from the open source community
 
-In addition to the pre-packaged bricks included with Compute Flow, you can install community-developed
-bricks from Git repositories.
+In addition to the pre-packaged bricks included with Compute Flow, you can install
+community-developed bricks from Git repositories.
 
 To add a community Git repository and install one of its brick models, run:
 
@@ -147,6 +147,7 @@ For further information, see the
 | Document                                                                                                             | Description                                         |
 | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | [**Minimal C++ application**](docs/examples/cpp/minimal_example.md)                                                  | Build a minimal application with the packaged SDK   |
+| [**Python audio tool calling**](docs/examples/python/audio_tool_calling.md)                                          | Run desktop tools from spoken requests              |
 | [**Python translation pipeline**](docs/examples/python/audio_to_audio_translation.md)                                | Audio-to-audio translation with Python              |
 | [**Python podcast generation**](docs/examples/python/generating_a_podcast.md)                                        | Generate a two-speaker podcast from a text file     |
 | [**Python audio transcription with speaker labels**](docs/examples/python/transcribing_audio_with_speaker_labels.md) | Transcribe audio with speaker labels and timestamps |
@@ -157,15 +158,20 @@ Other development, design, and reference documents are listed in the
 ## Support
 
 For help, bug reports, or feature requests, please
-[open an issue](https://github.com/ARM-software/ComputeFlow/issues).
+[open an issue](https://github.com/ARM-software/compute-flow/issues).
 
 ## Contributing
 
 We are not currently accepting contributions to the `compute_flow` core, but we welcome ideas,
 feature requests, issue reports, and other feedback through the project's
-[issue tracker](https://github.com/ARM-software/ComputeFlow/issues).
+[issue tracker](https://github.com/ARM-software/compute-flow/issues).
 
 See the [contribution guidelines](CONTRIBUTING.md) for details.
+
+## Acknowledgements
+
+We thank everyone who has helped shape Compute Flow. See [Acknowledgements](ACKNOWLEDGEMENTS.md) for
+recognition of their contributions.
 
 ## Trademarks
 

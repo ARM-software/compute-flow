@@ -47,7 +47,6 @@ class CreateBrickTemplateTest(unittest.TestCase):
                     "Nemotron3Diarization.h",
                     "README.md",
                     "info.json",
-                    "info.json.license",
                 },
             )
             info = json.loads((brick / "info.json").read_text(encoding="utf-8"))
@@ -68,7 +67,7 @@ class CreateBrickTemplateTest(unittest.TestCase):
             self.assertIn("TODO: implement model-specific inference", source)
             self.assertIn(
                 f"Copyright {date.today().year} Arm Limited",
-                (brick / "info.json.license").read_text(encoding="utf-8"),
+                header,
             )
 
             second_run = subprocess.run(

@@ -253,7 +253,7 @@ The packaged `registry.txt` is the default source list. Each line identifies one
 source.
 
 ```text
-https://gitlab.example.com/team/brick-code.git
+https://github.com/team/brick-code.git
 /Users/me/dev/bricks/local_tts_brick
 ../experimental-bricks/local_stt_brick
 ```

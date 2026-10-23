@@ -22,9 +22,6 @@ import tempfile
 
 
 _NOTICE_PREFIXES = ("license", "licence", "copying", "copyright", "notice")
-_METADATA_LICENSE = (
-    Path(__file__).resolve().parents[1] / "cmake/deps/dependencies.json.license"
-)
 
 
 def _copy_notices(source: Path, destination: Path) -> None:
@@ -136,11 +133,12 @@ def export_packages(
         (staging / "dependencies.json").write_text(
             json.dumps(snapshot, indent=2) + "\n", encoding="utf-8"
         )
-        shutil.copyfile(_METADATA_LICENSE, staging / "dependencies.json.license")
+        shutil.copyfile(
+            Path(__file__).resolve().parents[1] / "REUSE.toml", staging / "REUSE.toml"
+        )
         (staging / "SHA256SUMS").write_text(
             "".join(sorted(checksums)), encoding="utf-8"
         )
-        shutil.copyfile(_METADATA_LICENSE, staging / "SHA256SUMS.license")
         # Do not expose any new metadata until every archive has passed validation.
         output.mkdir(parents=True, exist_ok=True)
         for path in sorted(

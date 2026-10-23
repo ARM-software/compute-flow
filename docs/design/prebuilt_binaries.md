@@ -9,7 +9,7 @@
 Compute Flow uses prebuilt dependency libraries to reduce build time. A dependency release contains
 library archives, a manifest, checksums, and license information. The build downloads the enabled
 libraries from release assets, trying the configured mirrors in order. The packages are mirrored on
-[GitHub](https://github.com/ARM-software/ComputeFlow/releases). A package registry is not required.
+[GitHub](https://github.com/ARM-software/compute-flow/releases). A package registry is not required.
 
 ## Versioning and storage
 
@@ -82,7 +82,5 @@ Direct CMake builds control downloads with `COMPUTE_FLOW_USE_PREBUILT_DEPS` and 
 builds with `COMPUTE_FLOW_BUILD_<DEPENDENCY>_FROM_SOURCE`. After an automatic fallback, those cached
 options must be reset to retry prebuilt downloads.
 
-Source exports retain the manifest and CMake download logic but omit internal host settings. Without
-a configured download host or cached archives, the source-build fallback applies. The build
-workflows are described in [Building from source](../howto/building_from_source.md) and
+The build workflows are described in [Building from source](../howto/building_from_source.md) and
 [Building prebuilt libraries](../howto/building_prebuilt_libraries.md).

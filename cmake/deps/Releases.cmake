@@ -21,7 +21,7 @@ function(compute_flow_fetch_release_dependencies output result)
     set(COMPUTE_FLOW_DEPENDENCY_BASE_URL
         "${COMPUTE_FLOW_DEPENDENCY_BASE_URL_DEFAULT}"
         CACHE STRING
-        "Semicolon-separated release URLs, git-lfs://remote/commit sources, or local directories"
+        "Semicolon-separated release URLs or local directories"
     )
     set(COMPUTE_FLOW_DEPENDENCY_PROFILE "" CACHE STRING "Override the default dependency target profile")
     set(${result} 1 PARENT_SCOPE)
@@ -99,15 +99,10 @@ function(compute_flow_fetch_release_dependencies output result)
                 endif()
                 string(REGEX REPLACE "/+$" "" base_url "${base_url}")
                 message(STATUS "Fetching ${filename} from ${base_url}")
-                set(archive_url "${base_url}/${filename}")
-                if(base_url MATCHES "^git-lfs://")
-                    set(archive_url "${base_url}/${profile}/${filename}")
-                endif()
                 execute_process(
                     COMMAND
-                        "${CMAKE_COMMAND}" "-Darchive_url=${archive_url}" "-Dsha256=${sha256}" "-Dprefix=${prefix}"
-                        "-Dpython_executable=${Python3_EXECUTABLE}" -P
-                        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/FetchRelease.cmake"
+                        "${CMAKE_COMMAND}" "-Darchive_url=${base_url}/${filename}" "-Dsha256=${sha256}"
+                        "-Dprefix=${prefix}" -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/FetchRelease.cmake"
                     RESULT_VARIABLE fetch_result
                     OUTPUT_VARIABLE fetch_output
                     ERROR_VARIABLE fetch_output

@@ -17,11 +17,13 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# REUSE-IgnoreStart
 COPYRIGHT = (
     f"SPDX-FileCopyrightText: Copyright {date.today().year} Arm Limited and/or its affiliates "
     "<open-source-office@arm.com>"
 )
 LICENSE = "SPDX-License-Identifier: Apache-2.0"
+# REUSE-IgnoreEnd
 
 HEADER_TEMPLATE = """//
 // @COPYRIGHT@
@@ -264,7 +266,6 @@ def main() -> None:
             indent=2,
         )
         + "\n",
-        "info.json.license": f"{COPYRIGHT}\n\n{LICENSE}\n",
     }
 
     for filename, contents in files.items():

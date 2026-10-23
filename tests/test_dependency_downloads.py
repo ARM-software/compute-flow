@@ -367,10 +367,11 @@ class PrebuiltExportsTest(unittest.TestCase):
         before = (self.output / artifact["filename"]).read_bytes()
         self.assertNotIn("size", artifact)
         self.assertNotIn("cmake_config_dir", artifact)
-        self.assertFalse(list(self.output.glob("*.tar.gz.license")))
-        notice = (_ROOT / "cmake/deps/dependencies.json.license").read_bytes()
-        for filename in ("dependencies.json.license", "SHA256SUMS.license"):
-            self.assertEqual((self.output / filename).read_bytes(), notice)
+        self.assertFalse(list(self.output.glob("*.license")))
+        self.assertEqual(
+            (self.output / "REUSE.toml").read_bytes(),
+            (_ROOT / "REUSE.toml").read_bytes(),
+        )
         os.utime(self.prefix / "lib/liblitert.a", (100, 100))
         self._export()
         self.assertEqual(before, (self.output / artifact["filename"]).read_bytes())

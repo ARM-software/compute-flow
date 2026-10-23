@@ -14,6 +14,7 @@ Guided applications that put multiple development steps together:
 
 - [Minimal C++ application](examples/cpp/minimal_example.md)
 - [Minimal Python application](examples/python/minimal_example.md)
+- [Calling desktop tools from speech with Python](examples/python/audio_tool_calling.md)
 - [Audio-to-audio translation with Python](examples/python/audio_to_audio_translation.md)
 - [Audio transcription with speaker labels and timestamps using Python](examples/python/transcribing_audio_with_speaker_labels.md)
 

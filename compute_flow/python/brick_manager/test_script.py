@@ -122,9 +122,11 @@ def _render_script(
     lines = [
         "#!/usr/bin/env bash",
         "#",
+        # REUSE-IgnoreStart
         "# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>",
         "#",
         "# SPDX-License-Identifier: Apache-2.0",
+        # REUSE-IgnoreEnd
         "#",
         f"# {_GENERATED_MARKER}",
         "",

@@ -1041,12 +1041,12 @@ set(COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE "${CMAKE_SOURCE_DIR}/compute_flow/cli
 set(COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/internal/run_config.cpp")
 
 add_executable(
-    audiogen_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audiogen_cli.cpp"
+    audio_generation_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_generation_cli.cpp"
     ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
-compute_flow_link_installed_bricks(audiogen_cli)
+compute_flow_link_installed_bricks(audio_generation_cli)
 
 add_executable(
     audio_detection_cli
@@ -1057,22 +1057,31 @@ add_executable(
 compute_flow_link_installed_bricks(audio_detection_cli)
 
 add_executable(
-    audio_enhancement_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_enhancement_cli.cpp"
+    audio_to_audio_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_to_audio_cli.cpp"
     ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
-compute_flow_link_installed_bricks(audio_enhancement_cli)
+compute_flow_link_installed_bricks(audio_to_audio_cli)
 
 add_executable(
-    image_edit_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_edit_cli.cpp"
+    image_to_image_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_to_image_cli.cpp"
     ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
     ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
-target_link_libraries(image_edit_cli PRIVATE stb::stb)
-compute_flow_link_installed_bricks(image_edit_cli)
+target_link_libraries(image_to_image_cli PRIVATE stb::stb)
+compute_flow_link_installed_bricks(image_to_image_cli)
+
+add_executable(
+    image_generation_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_generation_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
+    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
+)
+target_link_libraries(image_generation_cli PRIVATE stb::stb)
+compute_flow_link_installed_bricks(image_generation_cli)
 
 add_executable(
     monocular_depth_estimation_cli
@@ -1119,6 +1128,22 @@ add_executable(
     ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
 )
 compute_flow_link_installed_bricks(stt_cli)
+
+add_executable(
+    audio_classification_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_classification_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
+    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
+)
+compute_flow_link_installed_bricks(audio_classification_cli)
+
+add_executable(
+    audio_tool_calling_cli
+    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_tool_calling_cli.cpp"
+    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
+    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
+)
+compute_flow_link_installed_bricks(audio_tool_calling_cli)
 
 add_executable(
     tts_cli

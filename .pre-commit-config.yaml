@@ -1,0 +1,17 @@
+#
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+repos:
+  - repo: https://github.com/fsfe/reuse-tool
+    rev: a1bb792acda6fd0724936b4ebbdbc8eceb9c0459  # v6.2.0
+    hooks:
+      - id: reuse
+        stages: [pre-commit]
+        always_run: true
+        # Support multilingual UTF-8.
+        additional_dependencies: [".[chardet]"]
+        name: "REUSE Compliant Copyright and License"
+        args: ["--no-multiprocessing", "lint"]
