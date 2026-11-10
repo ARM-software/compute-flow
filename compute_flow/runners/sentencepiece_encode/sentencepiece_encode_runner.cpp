@@ -14,8 +14,7 @@ namespace compute_flow {
 
 SentencePieceEncodeRunner::SentencePieceEncodeRunner() {}
 
-void SentencePieceEncodeRunner::setup(const ModelData& model,
-                                      ProfilerView profiler) {
+void SentencePieceEncodeRunner::setup(const ModelData& model, const BrickInfo&, ProfilerView profiler) {
 
     _model_name = model.model_name;
     _profiler   = profiler;

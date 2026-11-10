@@ -68,7 +68,11 @@ def render_overview(state_paths: StatePaths, console: Console = CONSOLE) -> None
 
 
 def render_update_result(result: UpdateResult, console: Console = CONSOLE) -> None:
-    registry_rows = [("Registry", _path(result.registry_path))]
+    registry_rows = [
+        ("Registry", _path(result.registry_path))
+        if result.registry_path is not None
+        else ("Registry", "Official")
+    ]
     if result.user_registry_path is not None:
         registry_rows.append(("User registry", _path(result.user_registry_path)))
     registry_rows.extend(

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import shutil
 import subprocess
 import sys
@@ -22,8 +23,9 @@ from typing import Any
 from brick_manager.cache import write_cache
 from brick_manager.catalog import load_required_cache, select_versioned_entry
 from brick_manager.cmake_generation import write_brick_cmake
+from brick_manager.custom_ops import record_custom_ops, validate_custom_ops
 from brick_manager.errors import BrickManagerError
-from brick_manager.git_source import checkout_git_source
+from brick_manager.git_source import checkout_git_source, resolve_git_brick
 from brick_manager.identity import BrickSelector, parse_brick_selector
 from brick_manager.metadata import (
     load_info_json,
@@ -68,7 +70,7 @@ def install_brick(
     version, entry = select_versioned_entry(
         cache,
         selector,
-        require_explicit_latest=False,
+        prefer_installed=False,
     )
     info_json = entry["info_json"]
     metadata = entry["metadata"]
@@ -83,6 +85,7 @@ def install_brick(
 
     if install_path.exists() and installed and not force:
         installed_info_json = load_installed_entry_info_json(entry, selected)
+        validate_custom_ops(install_path)
         metadata["installed_info_json"] = installed_info_json
         _write_generated_cmake(install_path)
         test_script_path = write_test_script(
@@ -107,6 +110,7 @@ def install_brick(
     with _prepared_source(metadata) as source_path:
         source_info_json = load_info_json(source_path)
         _validate_source_metadata(source_info_json, info_json, selected)
+        validate_custom_ops(source_path)
 
         if install_path.exists() and not installed and not force:
             shutil.rmtree(install_path)
@@ -128,6 +132,7 @@ def install_brick(
             _copy_local_source(source_path, install_path)
             installed_info_json = load_installed_info_json(install_path, selected)
             _validate_source_metadata(installed_info_json, info_json, selected)
+            custom_ops = validate_custom_ops(install_path)
             _write_generated_cmake(install_path)
             test_script_path = write_test_script(
                 install_path, selected, installed_info_json
@@ -143,6 +148,7 @@ def install_brick(
                 installed_info_json,
             )
             _clear_other_installed_versions(state_paths, cache, selected)
+            record_custom_ops(cache, selected, custom_ops)
             write_cache(state_paths.cache, cache)
         except Exception:
             if status in ("installed", "reinstalled_missing") and install_path.exists():
@@ -171,10 +177,19 @@ def _prepared_source(metadata: dict[str, Any]) -> Iterator[Path]:
         source_path = Path(temporary_dir) / "source"
         checkout_git_source(
             metadata["source"],
-            metadata["source_ref"],
             metadata["source_commit"],
             source_path,
         )
+        subdir = metadata.get("source_subdir")
+        if subdir:
+            source_path = resolve_git_brick(source_path, subdir)
+            tag = metadata.get("source_ref")
+            if tag is not None:
+                # Record the registry release in the installed metadata copy.
+                info_json = load_info_json(source_path, version=tag)
+                (source_path / "info.json").write_text(
+                    json.dumps(info_json, indent=2) + "\n", encoding="utf-8"
+                )
         yield source_path
 
 
@@ -185,11 +200,7 @@ def install_all_bricks(
     confirm: ConfirmCallback | None = None,
 ) -> InstallAllResult:
     cache = load_required_cache(state_paths)
-    identities = [
-        f"{brick}@{version}"
-        for brick, versions in sorted(cache.get("bricks", {}).items())
-        for version in sorted(versions)
-    ]
+    identities = sorted(cache.get("bricks", {}))
     statuses = {
         "installed": 0,
         "already_installed": 0,

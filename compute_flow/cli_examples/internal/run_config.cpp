@@ -6,10 +6,24 @@
 
 #include "compute_flow/cli_examples/internal/run_config.h"
 
+#include <charconv>
 #include <fstream>
+#include <string_view>
 #include <unordered_set>
 
 namespace compute_flow::bricks::internal {
+
+bool parse_num_ops_displayed(const char* text, size_t& num_ops_displayed) {
+    const std::string_view argument(text);
+    size_t parsed = 0;
+    const auto result = std::from_chars(argument.data(), argument.data() + argument.size(), parsed);
+    if (result.ec != std::errc{} || result.ptr != argument.data() + argument.size() || parsed == 0) {
+        return false;
+    }
+
+    num_ops_displayed = parsed;
+    return true;
+}
 
 std::vector<JsonConfig> load_run_configs(const std::string& path, std::initializer_list<const char*> allowed_arguments,
                                          std::initializer_list<const char*> required_arguments) {

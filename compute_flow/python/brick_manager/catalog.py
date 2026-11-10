@@ -387,7 +387,7 @@ def show_info(state_paths: StatePaths, brick: str) -> str:
 
 
 def select_entry(cache: dict[str, Any], selector: BrickSelector) -> dict[str, Any]:
-    _, entry = select_versioned_entry(cache, selector, require_explicit_latest=False)
+    _, entry = select_versioned_entry(cache, selector, prefer_installed=False)
     return entry
 
 
@@ -395,7 +395,7 @@ def select_versioned_entry(
     cache: dict[str, Any],
     selector: BrickSelector,
     *,
-    require_explicit_latest: bool = True,
+    prefer_installed: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     bricks = cache.get("bricks", {})
     versions = bricks.get(selector.key)
@@ -412,15 +412,10 @@ def select_versioned_entry(
         version = next(iter(versions))
         return version, versions[version]
 
-    if not require_explicit_latest:
-        available_versions = ", ".join(_sort_versions(versions))
-        raise BrickManagerError(
-            f"Multiple versions found for {selector.key}: {available_versions}"
-        )
-
-    installed_version = _installed_version(versions)
-    if installed_version is not None:
-        return installed_version, versions[installed_version]
+    if prefer_installed:
+        installed_version = _installed_version(versions)
+        if installed_version is not None:
+            return installed_version, versions[installed_version]
 
     version = _sort_versions(versions)[-1]
     return version, versions[version]

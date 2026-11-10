@@ -29,10 +29,12 @@ This document defines the required structure of a brick folder.
 
 ## Folder Layout
 
-Each brick must follow this layout:
+Brick implementations live in a separate [brick repository](brick_manager.md#brick-registry).
+`<brick-repository>` can be a local directory or a Git repository. Each brick must follow this
+layout:
 
 ```text
-bricks/<type>/<name>/
+<brick-repository>/<type>/<variant>/
   info.json
   <implementation-name>.cpp
   <implementation-name>.h
@@ -41,8 +43,9 @@ bricks/<type>/<name>/
     *.h
 ```
 
-In this layout, the directory `<name>` is the brick manager name used in commands. The
-`<implementation-name>` file stem is the value of `name` in `info.json`.
+In this layout, `<variant>` is the brick's source directory. Git repositories list
+`<type>/<variant>` in their root `registry.txt`. The `<implementation-name>` file stem is the value
+of `name` in `info.json`; the brick manager derives the name used in commands from this value.
 
 `internal/` is optional. If present, Compute Flow recursively discovers all `.cpp` files under
 `internal/` as implementation sources. Header files under `internal/` are private to the brick
@@ -79,7 +82,7 @@ For example:
 This requires a brick source root containing:
 
 ```text
-bricks/tts/qwen3-tts/
+<brick-repository>/tts/qwen3_tts/
   info.json
   Qwen3TTS.cpp
   Qwen3TTS.h

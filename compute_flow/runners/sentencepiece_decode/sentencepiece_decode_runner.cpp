@@ -7,7 +7,7 @@
 
 namespace compute_flow {
 
-void SentencePieceDecodeRunner::setup(const ModelData& model, ProfilerView profiler) {
+void SentencePieceDecodeRunner::setup(const ModelData& model, const BrickInfo&, ProfilerView profiler) {
     COMPUTE_FLOW_CHECK(model.inputs.size() == 1);
     COMPUTE_FLOW_CHECK(model.outputs.size() == 1);
     COMPUTE_FLOW_CHECK(model.states.empty());

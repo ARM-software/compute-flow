@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from brick_manager.errors import BrickManagerError
+from brick_manager.identity import parse_brick_selector
 
 
 JsonObject = dict[str, Any]
@@ -61,6 +62,34 @@ def validate_cache(cache: JsonObject) -> None:
     bricks = cache.get("bricks", {})
     if not isinstance(bricks, dict):
         raise BrickManagerError("Invalid cache: bricks must be an object")
+
+    custom_ops = cache.get("custom_ops", {})
+    if not isinstance(custom_ops, dict):
+        raise BrickManagerError("Invalid cache: custom_ops must be an object")
+    for identity, operators in custom_ops.items():
+        if not isinstance(identity, str):
+            raise BrickManagerError("Invalid cache: custom operator brick identity")
+        selector = parse_brick_selector(identity, require_version=True)
+        versions = bricks.get(selector.key)
+        entry = versions.get(selector.version) if isinstance(versions, dict) else None
+        metadata = entry.get("metadata") if isinstance(entry, dict) else None
+        if not isinstance(metadata, dict) or not metadata.get("installed", False):
+            raise BrickManagerError(
+                f"Invalid cache: custom operators need an installed brick: {identity}"
+            )
+        if not isinstance(operators, list) or not operators:
+            raise BrickManagerError(
+                f"Invalid cache: custom operators must be a non-empty list: {identity}"
+            )
+        for operator in operators:
+            if (
+                not isinstance(operator, dict)
+                or not isinstance(operator.get("name"), str)
+                or type(operator.get("version")) is not int
+            ):
+                raise BrickManagerError(
+                    f"Invalid cache: custom operator declaration: {identity}"
+                )
 
     for versions in bricks.values():
         if not isinstance(versions, dict):

@@ -84,6 +84,7 @@ endif()
 include(ExternalProject)
 include(FetchContent)
 include(GNUInstallDirs)
+find_package(Threads REQUIRED)
 
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
@@ -344,6 +345,7 @@ function(compute_flow_configure_brick_factory out_source)
             list(GET COMPUTE_FLOW_INSTALLED_BRICK_TYPES ${index} brick_type)
             list(GET COMPUTE_FLOW_INSTALLED_BRICK_NAMES ${index} brick_name)
             list(GET COMPUTE_FLOW_INSTALLED_BRICK_CLASSES ${index} brick_class)
+            list(GET COMPUTE_FLOW_INSTALLED_BRICK_TARGETS ${index} brick_target)
 
             string(APPEND factory_includes "#include \"${brick_name}.h\"\n")
             string(APPEND factory_branches "    if (type == \"${brick_type}\" && name == \"${brick_name}\") {\n")
@@ -359,6 +361,48 @@ function(compute_flow_configure_brick_factory out_source)
     configure_file("${CMAKE_SOURCE_DIR}/compute_flow/bricks/brick_factory.cpp.in" "${generated_source}" @ONLY)
 
     set(${out_source} "${generated_source}" PARENT_SCOPE)
+endfunction()
+
+function(compute_flow_configure_custom_ops_catalog out_source)
+    set(catalog_includes "")
+    set(catalog_entries "")
+    set(catalog_count 0)
+    set(custom_ops_archive_targets "")
+
+    foreach(
+        brick_target
+        brick_type
+        brick_name
+        IN
+        ZIP_LISTS
+            COMPUTE_FLOW_INSTALLED_BRICK_TARGETS
+            COMPUTE_FLOW_INSTALLED_BRICK_TYPES
+            COMPUTE_FLOW_INSTALLED_BRICK_NAMES
+    )
+        get_target_property(registry_header "${brick_target}" COMPUTE_FLOW_CUSTOM_OPS_REGISTRY_HEADER)
+        get_target_property(registry_symbol "${brick_target}" COMPUTE_FLOW_CUSTOM_OPS_REGISTRY_SYMBOL)
+        get_target_property(archive_target "${brick_target}" COMPUTE_FLOW_CUSTOM_OPS_ARCHIVE_TARGET)
+        if(registry_header AND registry_symbol)
+            string(APPEND catalog_includes "#include \"${registry_header}\"\n")
+            string(APPEND catalog_entries "    {\"${brick_type}\", \"${brick_name}\", &${registry_symbol}},\n")
+            math(EXPR catalog_count "${catalog_count} + 1")
+            list(APPEND custom_ops_archive_targets "${archive_target}")
+        endif()
+    endforeach()
+
+    set(COMPUTE_FLOW_CUSTOM_OPS_CATALOG_INCLUDES "${catalog_includes}")
+    set(COMPUTE_FLOW_CUSTOM_OPS_CATALOG_ENTRIES "${catalog_entries}")
+    set(COMPUTE_FLOW_CUSTOM_OPS_CATALOG_COUNT "${catalog_count}")
+
+    set(generated_source "${CMAKE_CURRENT_BINARY_DIR}/generated/compute_flow/custom_ops/compiled_registry_catalog.cpp")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/compute_flow/custom_ops/compiled_registry_catalog.cpp.in"
+        "${generated_source}"
+        @ONLY
+    )
+
+    set(${out_source} "${generated_source}" PARENT_SCOPE)
+    set(COMPUTE_FLOW_CUSTOM_OPS_ARCHIVE_TARGETS "${custom_ops_archive_targets}" PARENT_SCOPE)
 endfunction()
 
 function(compute_flow_configure_brick_type_libraries)
@@ -405,7 +449,12 @@ function(compute_flow_configure_brick_type_libraries)
 endfunction()
 
 function(compute_flow_link_installed_bricks target)
-    set(link_targets compute_flow_brick_factory compute_flow::compute_flow ${COMPUTE_FLOW_INSTALLED_BRICK_TYPE_TARGETS})
+    set(link_targets
+        compute_flow_brick_factory
+        compute_flow::compute_flow
+        compute_flow_custom_ops_catalog
+        ${COMPUTE_FLOW_INSTALLED_BRICK_TYPE_TARGETS}
+    )
 
     target_include_directories(${target} PRIVATE $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>)
 
@@ -437,6 +486,13 @@ set(COMPUTE_FLOW_PUBLIC_HEADERS
     "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/bricks/brick_interface_v1.h"
     "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/bricks/brick_manifest.h"
     "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/bricks/brick_version.h"
+    "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/custom_ops/memory_manager.h"
+    "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/custom_ops/registry_types.h"
+    "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/custom_ops/registry.h"
+    "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/custom_ops/thread_pool.h"
+    "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/custom_ops/v1/kernel.h"
+    "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/custom_ops/v1/types.h"
+    "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/custom_ops/v1/thread_dispatch.h"
     "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/profiler/profiler.h"
     "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/profiler/profiler_view.h"
     "${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}/compute_flow/runners/runner.h"
@@ -448,6 +504,11 @@ set(COMPUTE_FLOW_CORE_SOURCES
     compute_flow/manifest.cpp
     compute_flow/bricks/brick_manifest.cpp
     compute_flow/bricks/brick_version.cpp
+    compute_flow/custom_ops/memory_manager.cpp
+    compute_flow/custom_ops/registry.cpp
+    compute_flow/custom_ops/thread_pool.cpp
+    compute_flow/custom_ops/profile_label.cpp
+    compute_flow/custom_ops/v1/thread_dispatch.cpp
     compute_flow/memory_planner.cpp
     compute_flow/model_data.cpp
     compute_flow/profiler/profiler.cpp
@@ -463,7 +524,12 @@ if(COMPUTE_FLOW_ENABLE_EXECUTORCH)
 endif()
 
 if(COMPUTE_FLOW_ENABLE_LITERT)
-    list(APPEND COMPUTE_FLOW_CORE_SOURCES compute_flow/runners/litert/litert_runner.cpp)
+    list(
+        APPEND COMPUTE_FLOW_CORE_SOURCES
+        compute_flow/runners/litert/litert_runner.cpp
+        compute_flow/runners/litert/custom_ops/registration.cpp
+        compute_flow/runners/litert/custom_ops/v1/adapter.cpp
+    )
     if(COMPUTE_FLOW_ENABLE_LITERT_GPU AND NOT ANDROID)
         message(FATAL_ERROR "LiteRT GPU acceleration is currently supported on Android™ only.")
     endif()
@@ -546,7 +612,7 @@ if(COMPUTE_FLOW_ENABLE_LLAMACPP)
 endif()
 
 # --- Link dependencies (always) ---
-target_link_libraries(compute_flow_objs PRIVATE nlohmann_json::nlohmann_json libnpy::libnpy)
+target_link_libraries(compute_flow_objs PRIVATE nlohmann_json::nlohmann_json libnpy::libnpy Threads::Threads)
 
 # --- Conditional link dependencies ---
 if(COMPUTE_FLOW_ENABLE_EXECUTORCH)
@@ -591,7 +657,7 @@ target_include_directories(
     PUBLIC $<BUILD_INTERFACE:${COMPUTE_FLOW_PUBLIC_INCLUDE_DIR}> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-target_link_libraries(compute_flow_core PUBLIC nlohmann_json::nlohmann_json libnpy::libnpy)
+target_link_libraries(compute_flow_core PUBLIC nlohmann_json::nlohmann_json libnpy::libnpy Threads::Threads)
 
 if(COMPUTE_FLOW_ENABLE_EXECUTORCH)
     target_link_libraries(compute_flow_core PUBLIC executorch)
@@ -830,6 +896,9 @@ endforeach()
 
 set_target_properties(compute_flow PROPERTIES INTERFACE_LINK_LIBRARIES "${compute_flow_monolithic_link_libs}")
 
+# The core worker dispatcher uses C++ threads on every supported platform.
+target_link_libraries(compute_flow INTERFACE Threads::Threads)
+
 # LiteRT's platform and accelerator libraries are not merged into the monolithic archive. Its
 # umbrella target is stripped above with the static archive closure, so preserve these link-time
 # dependencies explicitly for consumers of compute_flow.
@@ -986,6 +1055,7 @@ compute_flow_discover_installed_bricks()
 compute_flow_configure_brick_type_libraries()
 
 compute_flow_configure_brick_factory(COMPUTE_FLOW_GENERATED_BRICK_FACTORY_SOURCE)
+compute_flow_configure_custom_ops_catalog(COMPUTE_FLOW_GENERATED_CUSTOM_OPS_CATALOG_SOURCE)
 
 # --- brick factory target ---
 add_library(compute_flow_brick_factory STATIC "${COMPUTE_FLOW_GENERATED_BRICK_FACTORY_SOURCE}")
@@ -1004,6 +1074,36 @@ target_link_libraries(
 
 add_library(compute_flow::brick_factory ALIAS compute_flow_brick_factory)
 
+add_library(compute_flow_custom_ops_catalog STATIC "${COMPUTE_FLOW_GENERATED_CUSTOM_OPS_CATALOG_SOURCE}")
+target_include_directories(compute_flow_custom_ops_catalog PRIVATE ${COMPUTE_FLOW_INSTALLED_BRICK_SOURCE_DIRS})
+target_link_libraries(compute_flow_custom_ops_catalog PUBLIC compute_flow::compute_flow)
+if(COMPUTE_FLOW_CUSTOM_OPS_ARCHIVE_TARGETS)
+    target_link_libraries(compute_flow_custom_ops_catalog PRIVATE ${COMPUTE_FLOW_CUSTOM_OPS_ARCHIVE_TARGETS})
+endif()
+
+if(COMPUTE_FLOW_PYBIND_ENABLED)
+    foreach(brick_name IN LISTS COMPUTE_FLOW_INSTALLED_BRICK_NAMES)
+        if(TARGET "${brick_name}_py")
+            if(UNIX AND NOT APPLE)
+                target_link_libraries(
+                    "${brick_name}_py"
+                    PRIVATE "$<LINK_GROUP:RESCAN,compute_flow_custom_ops_catalog,compute_flow::compute_flow>"
+                )
+            else()
+                target_link_libraries("${brick_name}_py" PRIVATE compute_flow_custom_ops_catalog)
+            endif()
+
+            if(BUILD_TESTING)
+                add_test(
+                    NAME "brick_python_import_${brick_name}"
+                    COMMAND "${Python3_EXECUTABLE}" -c "import compute_flow_py, ${brick_name}_py"
+                )
+                set_tests_properties("brick_python_import_${brick_name}" PROPERTIES LABELS "brick_python;smoke")
+            endif()
+        endif()
+    endforeach()
+endif()
+
 add_custom_target(
     compute_flow_application_sdk
     COMMAND
@@ -1013,7 +1113,11 @@ add_custom_target(
         "-DCOMPUTE_FLOW_LIBRARY_MANIFEST=${CMAKE_BINARY_DIR}/compute_flow_sdk_libraries-$<CONFIG>.txt"
         "-DCOMPUTE_FLOW_FORCE_LOAD_LIBRARY_MANIFEST=${CMAKE_BINARY_DIR}/compute_flow_sdk_force_load_libraries-$<CONFIG>.txt"
         "-DCOMPUTE_FLOW_SDK_DIR=${CMAKE_BINARY_DIR}/sdk" -P "${CMAKE_SOURCE_DIR}/cmake/PrepareComputeFlowSDK.cmake"
-    DEPENDS compute_flow compute_flow_brick_factory ${COMPUTE_FLOW_INSTALLED_BRICK_TYPE_TARGETS}
+    DEPENDS
+        compute_flow
+        compute_flow_brick_factory
+        compute_flow_custom_ops_catalog
+        ${COMPUTE_FLOW_INSTALLED_BRICK_TYPE_TARGETS}
     COMMENT "Preparing the Compute Flow application SDK"
     VERBATIM
 )
@@ -1040,144 +1144,42 @@ set(COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES
 set(COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/internal/image.cpp")
 set(COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/internal/run_config.cpp")
 
-add_executable(
-    audio_generation_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_generation_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
+set(COMPUTE_FLOW_BRICK_IMAGE_CLI_TYPES
+    image_to_image
+    image_generation
+    monocular_depth_estimation
+    image_segmentation
+    image_classification
+    object_detection
 )
-compute_flow_link_installed_bricks(audio_generation_cli)
+set(COMPUTE_FLOW_BRICK_IMAGE_INPUT_CLI_TYPES
+    image_to_image
+    monocular_depth_estimation
+    image_segmentation
+    image_classification
+    object_detection
+)
 
-add_executable(
-    audio_detection_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_detection_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(audio_detection_cli)
+set(installed_brick_cli_types ${COMPUTE_FLOW_INSTALLED_BRICK_TYPES})
+list(REMOVE_DUPLICATES installed_brick_cli_types)
+foreach(brick_type IN LISTS installed_brick_cli_types)
+    set(cli_source "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/${brick_type}_cli.cpp")
+    if(NOT EXISTS "${cli_source}")
+        continue()
+    endif()
 
-add_executable(
-    audio_to_audio_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_to_audio_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(audio_to_audio_cli)
+    set(cli_target "${brick_type}_cli")
+    set(cli_sources "${cli_source}" ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE} ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES})
+    if(brick_type IN_LIST COMPUTE_FLOW_BRICK_IMAGE_INPUT_CLI_TYPES)
+        list(APPEND cli_sources "${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}")
+    endif()
 
-add_executable(
-    image_to_image_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_to_image_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-target_link_libraries(image_to_image_cli PRIVATE stb::stb)
-compute_flow_link_installed_bricks(image_to_image_cli)
-
-add_executable(
-    image_generation_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_generation_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-target_link_libraries(image_generation_cli PRIVATE stb::stb)
-compute_flow_link_installed_bricks(image_generation_cli)
-
-add_executable(
-    monocular_depth_estimation_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/monocular_depth_estimation_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-target_link_libraries(monocular_depth_estimation_cli PRIVATE stb::stb)
-compute_flow_link_installed_bricks(monocular_depth_estimation_cli)
-
-add_executable(
-    image_segmentation_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_segmentation_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-target_link_libraries(image_segmentation_cli PRIVATE stb::stb)
-compute_flow_link_installed_bricks(image_segmentation_cli)
-
-add_executable(
-    image_classification_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/image_classification_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-target_link_libraries(image_classification_cli PRIVATE stb::stb)
-compute_flow_link_installed_bricks(image_classification_cli)
-
-add_executable(
-    lm_text_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/lm_text_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(lm_text_cli)
-
-add_executable(
-    stt_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/stt_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(stt_cli)
-
-add_executable(
-    audio_classification_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_classification_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(audio_classification_cli)
-
-add_executable(
-    audio_tool_calling_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_tool_calling_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(audio_tool_calling_cli)
-
-add_executable(
-    tts_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/tts_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(tts_cli)
-
-add_executable(
-    vad_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/vad_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(vad_cli)
-
-add_executable(
-    audio_embedding_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/audio_embedding_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-compute_flow_link_installed_bricks(audio_embedding_cli)
-
-add_executable(
-    object_detection_cli
-    "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/object_detection_cli.cpp"
-    ${COMPUTE_FLOW_BRICK_RUN_CONFIG_SOURCE}
-    ${COMPUTE_FLOW_BRICK_IMAGE_HELPER_SOURCE}
-    ${COMPUTE_FLOW_BRICK_CLI_HELPER_SOURCES}
-)
-target_link_libraries(object_detection_cli PRIVATE stb::stb)
-compute_flow_link_installed_bricks(object_detection_cli)
+    add_executable(${cli_target} ${cli_sources})
+    if(brick_type IN_LIST COMPUTE_FLOW_BRICK_IMAGE_CLI_TYPES)
+        target_link_libraries(${cli_target} PRIVATE stb::stb)
+    endif()
+    compute_flow_link_installed_bricks(${cli_target})
+endforeach()
 
 if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(tests)

@@ -70,8 +70,8 @@ required input arguments and can contain optional run arguments. The CLI loads a
 selected brick once, resets its state before each entry, and runs the entries in array order.
 Console results and profiling information are displayed after each entry.
 
-`-m`, `-t`, and `--enable-op-profiling` remain command-line arguments because they configure the
-shared setup rather than an individual run.
+`-m`, `-t`, `--enable-op-profiling`, and `--num-ops-displayed` remain command-line arguments because
+they configure the shared setup rather than an individual run.
 
 Input paths in a runs file must be ordinary filesystem paths. The `@sample/...` selector is not
 accepted; it remains available when the argument is passed directly on the command line.
@@ -181,6 +181,14 @@ Users can also provide the full path to the manifest:
 
 ```sh
 ./<brick_type>_cli -m <manifest> --enable-op-profiling ..
+```
+
+When `--enable-op-profiling` is enabled, the pretty profile shows the five most costly operations
+per model by default. Set `--num-ops-displayed` to a positive integer to change the number shown:
+
+```sh
+./<brick_type>_cli -m <manifest> --enable-op-profiling --num-ops-displayed 10 ..
+python -m cli_examples.<brick_type>_cli -m <manifest> --enable-op-profiling --num-ops-displayed 10 ..
 ```
 
 ### Save generated text to a file:

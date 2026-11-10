@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <climits>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <iosfwd>
@@ -75,6 +76,11 @@ struct ProfilingOptions {
      *          on the backend and number of operations.
      */
     bool enable_op_profiling = false;
+
+    /**
+     * @brief Maximum number of operations displayed per model in the pretty profile.
+     */
+    std::size_t num_ops_displayed = 5;
 
     /**
      * @brief Enable annotations in an external timeline profiler.
@@ -190,7 +196,7 @@ public:
                                 std::size_t top_ops      = 5,
                                 bool enable_op_profiling = false) const;
     void display_profile_visual(bool enable_op_profiling) const {
-        display_profile_visual(std::cout, 16, 50, 30, 5, enable_op_profiling);
+        display_profile_visual(std::cout, 16, 50, 30, _options.num_ops_displayed, enable_op_profiling);
     }
     void write(std::ostream& os) const;
 

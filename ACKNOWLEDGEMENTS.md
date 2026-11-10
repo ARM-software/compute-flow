@@ -6,7 +6,7 @@
 
 # Acknowledgements
 
-Compute Flow was created and developed at Arm with contributions from the people below. This file
+Compute Flow was created and developed at Arm® with contributions from the people below. This file
 records the original authors and early contributors recognised by the project as of October 2026.
 
 ## Original authors

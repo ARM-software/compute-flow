@@ -41,7 +41,7 @@ enum class LMRunnerModality {
  * LMRunner runner;
  *
  * // 1. Initialize the model
- * runner.setup(model_data, profiler);
+ * runner.setup(model_data, brick_info, profiler);
  *
  * // 2. Get the TensorFormat for the preprocessing output
  * TensorFormat preprocessing_format

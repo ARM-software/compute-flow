@@ -23,8 +23,7 @@ namespace compute_flow {
 
 ExecuTorchRunner::ExecuTorchRunner() {}
 
-void ExecuTorchRunner::setup(const ModelData& model,
-                             ProfilerView profiler) {
+void ExecuTorchRunner::setup(const ModelData& model, const BrickInfo&, ProfilerView profiler) {
 
     _model_name = model.model_name;
     _profiler   = profiler;

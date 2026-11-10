@@ -31,6 +31,8 @@
 
 namespace compute_flow {
 
+struct BrickInfo;
+
 class ONNXRTRunner {
 public:
     ONNXRTRunner();
@@ -38,8 +40,7 @@ public:
                   const std::string& model_path,
                   const AcceleratorConfig& accelerator,
                   ProfilerView profiler = {});
-    void setup(const ModelData& model,
-               ProfilerView profiler = {});
+    void setup(const ModelData& model, const BrickInfo&, ProfilerView profiler = {});
     void run();
     const std::string& model_name() const;
     void map_input(std::string_view key, size_t idx);

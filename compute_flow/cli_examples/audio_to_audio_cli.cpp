@@ -35,6 +35,8 @@ void print_usage(const char* exec) {
             "1).\n"
             "  -o <output.wav>           Output enhanced mono float32 WAV file.\n"
             "  --enable-op-profiling     Enable per-op profiling output.\n"
+            "  --num-ops-displayed <count>  Maximum number of ops displayed per model when "
+            "--enable-op-profiling is enabled (default: 5)\n"
             "  -h                        Show this help message and exit.\n",
             exec);
 }
@@ -159,8 +161,10 @@ int32_t run_cli(int32_t argc, char** argv) {
     std::string json_file;
     std::string thread_spec  = "1";
     bool enable_op_profiling = false;
+    size_t num_ops_displayed = 5;
 
     static struct option long_options[] = {{"enable-op-profiling", no_argument, nullptr, 1001},
+                                           {"num-ops-displayed", required_argument, nullptr, 1002},
                                            {"help", no_argument, nullptr, 'h'},
                                            {nullptr, 0, nullptr, 0}};
 
@@ -184,6 +188,12 @@ int32_t run_cli(int32_t argc, char** argv) {
                 break;
             case 1001:
                 enable_op_profiling = true;
+                break;
+            case 1002:
+                if (!internal::parse_num_ops_displayed(optarg, num_ops_displayed)) {
+                    std::cerr << "--num-ops-displayed must be a positive integer." << std::endl;
+                    return EXIT_FAILURE;
+                }
                 break;
             case 'h':
             default:
@@ -212,6 +222,7 @@ int32_t run_cli(int32_t argc, char** argv) {
     BrickOptions options;
     options.runtime.enable_warmup         = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     brick->setup(manifest, options);
 

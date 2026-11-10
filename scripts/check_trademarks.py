@@ -125,6 +125,16 @@ def _mask_allowed_uses(text: str) -> str:
     masked = _mask(r"\b\S+@\S+", masked)
     masked = _mask(r"(?:[A-Za-z]:)?(?:/[\w.@+~()\-]+)+", masked)
 
+    # Preserve C++ type names in declarations, template arguments, and qualified names.
+    identifier = r"[A-Za-z_]\w*"
+    masked = _mask(rf"\benum\s+class\s+{identifier}\b", masked)
+    masked = _mask(rf"\busing\s+{identifier}\s*=", masked)
+    masked = _mask(
+        rf"\b{identifier}(?:::{identifier})*<\s*{identifier}(?:\s*,\s*{identifier})*\s*>",
+        masked,
+    )
+    masked = _mask(rf"\b{identifier}(?:::{identifier})+\b", masked)
+
     for entity in LEGAL_ENTITIES:
         masked = masked.replace(entity, " " * len(entity))
 

@@ -67,10 +67,11 @@ def save_image(image: np.ndarray, output_path: str | Path) -> None:
 def run_single(
     manifest_path: str,
     input_value: str,
-    prompt: str,
+    prompt: str | None,
     output_path: Path | None,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
 ) -> None:
     """Run one image-to-image request."""
     # Parse the number of CPU threads to use
@@ -90,6 +91,7 @@ def run_single(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -106,7 +108,8 @@ def run_single(
 
     # Set the input
     inputs["image"] = padded_image
-    inputs["prompt"] = prompt
+    if prompt is not None:
+        inputs["prompt"] = prompt
 
     # Run the model inference
     output = brick.run(inputs)
@@ -134,6 +137,7 @@ def run_multiple(
     runs_file: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
 ) -> None:
     """Run image-to-image requests from a JSON file."""
     # Parse the number of CPU threads to use
@@ -153,11 +157,12 @@ def run_multiple(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
 
-    run_configs = load_run_configs(runs_file, {"i", "p", "o"}, {"i", "p"})
+    run_configs = load_run_configs(runs_file, {"i", "p", "o"}, {"i"})
 
     for run_index, config in enumerate(run_configs):
         brick.reset_states()
@@ -166,14 +171,14 @@ def run_multiple(
         print(f"Run {run_id}")
         output_path = get_run_value(config, "o", "", run_index)
         input_path = get_run_value(config, "i", "", run_index)
-        prompt = get_run_value(config, "p", "", run_index)
+        prompt = get_run_value(config, "p", "", run_index) if "p" in config else None
 
         if not input_path:
             raise ValueError(
                 f"Run {run_index + 1} argument 'i' must be a non-empty string"
             )
 
-        if not prompt:
+        if prompt is not None and not prompt:
             raise ValueError(
                 f"Run {run_index + 1} argument 'p' must be a non-empty string"
             )
@@ -186,7 +191,8 @@ def run_multiple(
 
         # Set the input
         inputs["image"] = padded_image
-        inputs["prompt"] = prompt
+        if prompt is not None:
+            inputs["prompt"] = prompt
 
         # Run the model inference
         output = brick.run(inputs)
@@ -214,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         usage=(
             "%(prog)s -m <manifest.json> "
-            "(-i <input_image> -p <prompt> | -j <runs.json>) "
+            "(-i <input_image> [-p <prompt>] | -j <runs.json>) "
             "[-o <output.png>] [-t <thread_spec>]"
         ),
         add_help=False,
@@ -236,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         "-p",
         dest="prompt",
         metavar="<prompt>",
-        help="Natural-language editing instruction.",
+        help="Optional text instruction for the transformation.",
     )
     parser.add_argument(
         "-j",
@@ -266,20 +272,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable per-operation profiling.",
     )
+    parser.add_argument(
+        "--num-ops-displayed",
+        type=int,
+        default=5,
+        metavar="<count>",
+        help="Maximum number of ops displayed per model when --enable-op-profiling is enabled (default: 5).",
+    )
     parser.add_argument("-h", action="help", help="Show this help message.")
 
     args = parser.parse_args(argv)
+
+    if args.num_ops_displayed <= 0:
+        parser.error("--num-ops-displayed must be a positive integer")
 
     # Check the mandatory arguments
     multiple_runs_mode = args.runs_file is not None
     direct_arguments_present = any(
         value is not None for value in (args.input_path, args.prompt, args.output_path)
     )
-    if (
-        not multiple_runs_mode and (args.input_path is None or args.prompt is None)
-    ) or (multiple_runs_mode and direct_arguments_present):
-        parser.error("use either -i -p [-o] or -j")
-    if not multiple_runs_mode and not args.prompt:
+    if (not multiple_runs_mode and args.input_path is None) or (
+        multiple_runs_mode and direct_arguments_present
+    ):
+        parser.error("use either -i [-p] [-o] or -j")
+    if args.prompt is not None and not args.prompt:
         parser.error("argument -p: must not be empty")
 
     try:
@@ -289,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.runs_file,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
             )
         else:
             run_single(
@@ -298,6 +315,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.output_path,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
             )
     except ValueError as error:
         parser.error(str(error))

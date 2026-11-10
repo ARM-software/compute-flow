@@ -383,7 +383,7 @@ bool LlamaCppLMRunner::profile_op(ggml_tensor* tensor, bool ask, void* user_data
     return true;
 }
 
-void LlamaCppLMRunner::setup(const ModelData& model, ProfilerView profiler) {
+void LlamaCppLMRunner::setup(const ModelData& model, const BrickInfo&, ProfilerView profiler) {
     _model_name = model.model_name;
     _profiler   = profiler;
     _saved_states.clear();

@@ -34,7 +34,7 @@ public:
     LlamaCppLMRunner() = default;
 
     // IRunner
-    void setup(const ModelData& model, ProfilerView profiler = {}) override;
+    void setup(const ModelData& model, const BrickInfo&, ProfilerView profiler = {}) override;
     const std::string& model_name() const override;
     void map_input(std::string_view key, size_t idx) override;
     void map_input(std::string_view key, std::string_view tensor_name) override;

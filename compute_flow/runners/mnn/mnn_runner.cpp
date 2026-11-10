@@ -130,7 +130,7 @@ bool tensor_layout_matches(const MNN::Tensor& lhs, const MNN::Tensor& rhs) {
 
 }  // namespace
 
-void MNNRunner::setup(const ModelData& model, ProfilerView profiler) {
+void MNNRunner::setup(const ModelData& model, const BrickInfo&, ProfilerView profiler) {
     if (model.acc_config.priorities.empty()) {
         throw std::invalid_argument("MNN runner requires an accelerator preference");
     }

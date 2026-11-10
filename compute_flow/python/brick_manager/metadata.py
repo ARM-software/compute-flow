@@ -31,7 +31,8 @@ _MODEL_SOURCE_KINDS = frozenset(("git", "huggingface", "local"))
 _MODEL_SOURCE_FIELDS = frozenset(("kind", "url", "ref"))
 
 
-def load_info_json(source_path: Path) -> JsonObject:
+def load_info_json(source_path: Path, *, version: str | None = None) -> JsonObject:
+    """Load brick metadata, using the registry release version when supplied."""
     info_path = source_path / "info.json"
     try:
         with info_path.open(encoding="utf-8") as info_file:
@@ -44,6 +45,8 @@ def load_info_json(source_path: Path) -> JsonObject:
     if not isinstance(info_json, dict):
         raise BrickManagerError(f"Invalid info.json: {info_path}")
 
+    if version is not None:
+        info_json["version"] = version
     validate_info_json(info_json)
     return info_json
 

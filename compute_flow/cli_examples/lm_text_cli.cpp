@@ -48,12 +48,14 @@ void print_usage(const char* name) {
         "  -n <max_generated_tokens> Maximum number of generated tokens (default=max int64)\n"
         "  -o <output_file>          Write generated text to this file instead of stdout\n"
         "  --enable-op-profiling     Enable per-op profiling (default: off)\n"
+        "  --num-ops-displayed <count>  Maximum number of ops displayed per model when "
+        "--enable-op-profiling is enabled (default: 5)\n"
         "  -h                        Show this help message\n",
         name);
 }
 
 GenerationStats run_single(std::string manifest_path, const std::string& thread_spec, bool enable_op_profiling,
-                           const std::string& text_prompt, int64_t max_generated_tokens,
+                           size_t num_ops_displayed, const std::string& text_prompt, int64_t max_generated_tokens,
                            const std::string& output_file) {
     // Parse the number of CPU threads to use
     size_t default_threads   = 1;
@@ -73,6 +75,7 @@ GenerationStats run_single(std::string manifest_path, const std::string& thread_
     BrickOptions options;
     options.runtime.enable_warmup         = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     // Setup the brick
     brick->setup(manifest, options);
@@ -169,7 +172,7 @@ GenerationStats run_single(std::string manifest_path, const std::string& thread_
 }
 
 GenerationStats run_multiple(std::string manifest_path, const std::string& thread_spec, bool enable_op_profiling,
-                             const std::string& runs_file) {
+                             size_t num_ops_displayed, const std::string& runs_file) {
     // Parse the number of CPU threads to use
     size_t default_threads   = 1;
     const auto model_threads = internal::parse_hint_cpu_threads(thread_spec, default_threads);
@@ -188,6 +191,7 @@ GenerationStats run_multiple(std::string manifest_path, const std::string& threa
     BrickOptions options;
     options.runtime.enable_warmup         = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     // Setup the brick
     brick->setup(manifest, options);
@@ -317,7 +321,9 @@ int32_t run_cli(int32_t argc, char** argv) {
     int64_t max_generated_tokens = std::numeric_limits<int64_t>::max();
     bool has_max_tokens_argument = false;
     bool enable_op_profiling     = false;
+    size_t num_ops_displayed     = 5;
     static option long_options[] = {{"enable-op-profiling", no_argument, nullptr, 1001},
+                                    {"num-ops-displayed", required_argument, nullptr, 1002},
                                     {"help", no_argument, nullptr, 'h'},
                                     {nullptr, 0, nullptr, 0}};
 
@@ -346,6 +352,12 @@ int32_t run_cli(int32_t argc, char** argv) {
             case 1001:
                 enable_op_profiling = true;
                 break;
+            case 1002:
+                if (!internal::parse_num_ops_displayed(optarg, num_ops_displayed)) {
+                    std::cerr << "--num-ops-displayed must be a positive integer." << std::endl;
+                    return EXIT_FAILURE;
+                }
+                break;
             case 'h':
                 print_usage(argv[0]);
                 return EXIT_SUCCESS;
@@ -367,9 +379,9 @@ int32_t run_cli(int32_t argc, char** argv) {
 
     const GenerationStats generation_stats =
         multiple_runs_mode
-            ? run_multiple(manifest_path, thread_spec, enable_op_profiling, json_file)
-            : run_single(manifest_path, thread_spec, enable_op_profiling, text_prompt, max_generated_tokens,
-                         output_file);
+            ? run_multiple(manifest_path, thread_spec, enable_op_profiling, num_ops_displayed, json_file)
+            : run_single(manifest_path, thread_spec, enable_op_profiling, num_ops_displayed, text_prompt,
+                         max_generated_tokens, output_file);
 
     std::cout << std::fixed << std::setprecision(3);
 

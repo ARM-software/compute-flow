@@ -16,7 +16,7 @@ from pathlib import Path
 from brick_manager.errors import BrickManagerError
 from brick_manager.paths import StatePaths
 from brick_manager.registry import (
-    default_registry_path,
+    OFFICIAL_REGISTRY_URL,
     is_git_source,
     parse_registry,
     registry_entries,
@@ -61,7 +61,7 @@ def add_registry_source(
 
     registry_path = _target_registry_path(state_paths, registry)
     if registry is None:
-        registered = registry_entries(default_registry_path(), state_paths.registry)
+        registered = registry_entries(None, state_paths.registry)
     else:
         registered = registry_entries(registry_path) if registry_path.is_file() else []
     if any(source == url for _, source in registered):
@@ -84,19 +84,12 @@ def remove_registry_source(
 ) -> RegistryRemoveResult:
     """Remove one source for the next update without uninstalling bricks."""
     registry_path = _target_registry_path(state_paths, registry)
-    if not registry_path.is_file():
-        if registry is None and source in parse_registry(default_registry_path()):
-            raise BrickManagerError(
-                f"Source belongs to the packaged registry: {source}"
-            )
-        raise BrickManagerError(f"Registry file not found: {registry_path}")
-
-    sources = parse_registry(registry_path)
+    sources = parse_registry(registry_path) if registry_path.is_file() else []
     if source not in sources:
-        if registry is None and source in parse_registry(default_registry_path()):
-            raise BrickManagerError(
-                f"Source belongs to the packaged registry: {source}"
-            )
+        if registry is None and source == OFFICIAL_REGISTRY_URL:
+            raise BrickManagerError(f"Cannot remove the official registry: {source}")
+        if not registry_path.is_file():
+            raise BrickManagerError(f"Registry file not found: {registry_path}")
         raise BrickManagerError(f"Registry source not found: {source}")
 
     updated_registry = "".join(f"{entry}\n" for entry in sources if entry != source)
@@ -108,7 +101,7 @@ def remove_registry_source(
 def list_registry_sources(
     state_paths: StatePaths, registry: str | None = None
 ) -> list[RegistrySource]:
-    """List configured sources from the default pair or one selected file."""
+    """List official and user sources, or sources from one selected file."""
     if registry is not None:
         registry_path = _target_registry_path(state_paths, registry)
         return [
@@ -116,15 +109,12 @@ def list_registry_sources(
             for source in parse_registry(registry_path)
         ]
 
-    packaged_path = default_registry_path()
     return [
         RegistrySource(
             source,
-            "Packaged" if source_registry == packaged_path else "User",
+            "Official" if source_registry is None else "User",
         )
-        for source_registry, source in registry_entries(
-            packaged_path, state_paths.registry
-        )
+        for source_registry, source in registry_entries(None, state_paths.registry)
     ]
 
 

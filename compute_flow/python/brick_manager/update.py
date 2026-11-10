@@ -20,7 +20,6 @@ from brick_manager.identity import BrickSelector, brick_manager_name
 from brick_manager.metadata import load_info_json, load_installed_info_json
 from brick_manager.paths import StatePaths
 from brick_manager.registry import (
-    default_registry_path,
     is_git_source,
     registry_entries,
     resolve_local_source,
@@ -35,7 +34,7 @@ class BrickUpdate:
 
 @dataclass(frozen=True)
 class UpdateResult:
-    registry_path: Path
+    registry_path: Path | None
     cache_path: Path
     brick_versions: int
     available_updates: list[BrickUpdate] = field(default_factory=list)
@@ -44,12 +43,15 @@ class UpdateResult:
 
 def update_cache(state_paths: StatePaths, registry: str | None = None) -> UpdateResult:
     registry_path = (
-        Path(registry).expanduser().resolve() if registry else default_registry_path()
+        Path(registry).expanduser().resolve() if registry is not None else None
     )
 
     previous_cache = _load_previous_cache(state_paths.cache)
     previous_bricks = previous_cache.get("bricks", {})
-    next_cache: dict[str, object] = {"bricks": {}}
+    next_cache: dict[str, object] = {
+        "bricks": {},
+        "custom_ops": previous_cache.get("custom_ops", {}),
+    }
 
     for source_registry, source in registry_entries(
         registry_path,
@@ -58,18 +60,20 @@ def update_cache(state_paths: StatePaths, registry: str | None = None) -> Update
         if is_git_source(source):
             source_versions = [
                 (
-                    git_version.info_json,
+                    git_brick.info_json,
                     {
                         "source": source,
                         "source_type": "git",
                         "source_path": None,
-                        "source_ref": git_version.tag,
-                        "source_commit": git_version.commit,
+                        "source_subdir": git_brick.subdir,
+                        "source_ref": git_brick.tag,
+                        "source_commit": git_brick.commit,
                     },
                 )
-                for git_version in inspect_git_source(source)
+                for git_brick in inspect_git_source(source)
             ]
         else:
+            assert source_registry is not None
             source_path = resolve_local_source(source_registry, source)
             if not source_path.is_dir():
                 raise BrickManagerError(f"Registry source is not a directory: {source}")
@@ -129,7 +133,6 @@ def update_cache(state_paths: StatePaths, registry: str | None = None) -> Update
         previous_bricks,
         next_cache["bricks"],
     )
-
     write_cache(state_paths.cache, next_cache)
     return UpdateResult(
         registry_path=registry_path,

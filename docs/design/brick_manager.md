@@ -249,14 +249,27 @@ ______________________________________________________________________
 
 ## Brick Registry
 
-The packaged `registry.txt` is the default source list. Each line identifies one unique brick
-source.
+By default, Compute Flow uses the
+[brick registry maintained by Arm®](https://github.com/ARM-software/compute-flow-bricks). You can
+add additional brick registries with:
+
+```bash
+compute-flow registry add https://example.com/team/example-tts.git
+```
+
+When you run `compute-flow update`, the Brick Manager fetches all tags from every registered brick
+registry, including the default Arm® registry and any registries you added. At each tag, it reads
+the root `registry.txt`. That file lists brick directories relative to the repository, one
+`<type>/<variant>` per line:
 
 ```text
-https://github.com/team/brick-code.git
-/Users/me/dev/bricks/local_tts_brick
-../experimental-bricks/local_stt_brick
+tts/pocket_tts
+tts/qwen3_tts
+vad/silero
 ```
+
+Each directory contains the brick's `info.json` and implementation files. The `type` in `info.json`
+must match the top-level directory. One repository can publish one or many bricks.
 
 Use `--registry` to select a different source list:
 
@@ -266,21 +279,25 @@ compute-flow update --registry /path/to/registry.txt
 
 `compute-flow registry add <git-url>` stores a Git URL in `$COMPUTE_FLOW_HOME/registry.txt` (or
 `~/.compute-flow/registry.txt`). `registry remove` removes a source from that user registry, and
-`registry list` shows both packaged and user sources. Run `compute-flow update` after adding or
-removing a source to refresh the cache. By default, `update` reads both registries. Passing
-`--registry <path>` to any registry command or to `update` selects only that file; add and remove
-edit it, and `update` reads it.
+`registry list` shows the official registry and user sources. Run `compute-flow update` after adding
+or removing a source to refresh the cache. By default, `update` uses the official registry and the
+sources in your user registry. Passing `--registry <path>` to any registry command or to `update`
+selects only that file; add and remove edit it, and `update` reads it.
 
 The registry allows working with remote and local sources in the same workflow.
 
-- Relative local paths are resolved relative to the selected `registry.txt`, not relative to the
-  process working directory.
 - Git URLs may use HTTPS, SSH, Git, or file transport, including Git's `git@host:path` SSH syntax.
-  Versions are discovered from tags. `update` reads each tag's root `info.json` without installing
-  the brick, and records the tag and commit for that version. A Git source must have at least one
-  tag, and each tag must contain valid brick metadata. Two tags declaring the same brick identity
-  and version are an error.
-- Local sources are ordinary directories and do not need to be git repositories.
+- Every Git repository must contain a root `registry.txt` listing `<type>/<variant>` directories.
+  Paths must stay within that repository; nested registry URLs are not supported.
+- Tags must use numeric `MAJOR.MINOR.PATCH`, such as `1.2.3`, with no prefix, suffix, or leading
+  zeros. Repositories without tags or with invalid tags are rejected.
+- `update` reads the registry and listed bricks at every tag. The repository tag is the version for
+  all bricks listed in that release.
+- A brick's available versions are the tags whose registries contain it.
+- The manager records each tag's commit and brick directory for installation.
+- Duplicate brick identities and versions across sources are an error.
+- Local sources are ordinary directories and do not need to be Git repositories. Relative local
+  paths are resolved relative to the selected `registry.txt`.
 
 The Compute Flow Brick Manager operates around a local indexer model meaning it maintains a local
 cache of available bricks and their metadata. The generated cache lives at
@@ -362,7 +379,6 @@ Required top-level fields:
   one of the JSON files under `brick_apis/`, such as `tts.v1` or `object_detection.v1`.
 - `description`: short user-facing description of the brick.
 - `author`: brick publisher or maintainer.
-- `version`: brick release unit identifier.
 - `models`: object containing model declarations keyed by model name.
 
 Optional top-level fields:
@@ -375,8 +391,8 @@ The `type` and `api` fields are intentionally separate. `type` identifies where 
 belongs in the brick manager namespace. `api` identifies the public input/output tensor contract
 implemented by that brick. Multiple `tts` variants can implement `tts.v1`.
 
-The `version` field describes a release unit of the brick. If the brick is hosted on GitHub, the
-version should match its release tag. The brick manager may support multiple versions in the future.
+Publishing a new repository tag releases all bricks listed in its registry at that version. The
+manager retains an installed version until the user explicitly installs another version.
 
 The Compute Flow brick manager will not index a brick when:
 
@@ -469,6 +485,16 @@ directory, not under `$COMPUTE_FLOW_HOME`. The installed brick's selected versio
 snapshot, and model install state are recorded in `cache.json`. The recorded metadata snapshot and
 the installed source tree's `info.json` must agree. Only one installed source tree may exist for
 each `<type>:<name>`.
+
+The `custom_ops` object in `cache.json` is the installed custom-operator inventory. It is keyed by
+`<type>:<name>@<brick-version>` and contains the custom operator declarations whose schema and
+folder layout passed installation checks. Each declaration's `version` is its custom operator schema
+version, separate from the brick version in the key. Declarations are sorted by custom operator
+name. Bricks without custom operators have no inventory entry. Installing, replacing, or
+uninstalling a brick changes its inventory entry with the install state in one cache write. A
+registry update carries the inventory forward unchanged, including entries for installed bricks
+removed from the registry. These operations do not compile custom operators. The next explicit build
+compiles the installed bricks' custom operations.
 
 `model install` verifies every file listed in `SHA256SUMS`, then compares the `SHA256SUMS` file's
 SHA256 with the installed brick's declaration. Later status and brick installation checks compare
@@ -612,6 +638,10 @@ For each installed cache entry, CMake uses the installed source path recorded by
 and adds that brick source directory to the main build. Installed brick build output is placed under
 the selected CMake build directory.
 
+CMake creates a C++ `<type>_cli` example only when a brick of that type is installed and the example
+source exists. Multiple installed variants of the same type share one CLI target. With no installed
+bricks, the build creates no brick CLI targets.
+
 The build command is a small wrapper around CMake. It uses `COMPUTE_FLOW_CMAKE_EXECUTABLE` when set.
 Otherwise, it uses the pinned CMake version managed under `$COMPUTE_FLOW_HOME/tools` and downloads
 that version before configuring the build when needed.
@@ -688,7 +718,7 @@ excludes concrete variant archives; it does not create or combine libraries itse
 
 If `compute-flow brick install` or `compute-flow brick uninstall` changes the tracked `cache.json`,
 the next `compute-flow build <target>` automatically reruns configure and regenerates the
-installed-brick factory for that build tree.
+installed-brick factory and custom operator catalog for that build tree.
 
 Rerun `compute-flow build <target>` after changing `COMPUTE_FLOW_HOME`. Also rerun configure
 manually if the Compute Flow home directory itself did not exist when the build tree was first
@@ -742,6 +772,14 @@ target exposes the brick's root source directory as a public include directory a
 When Python bindings are enabled, the generated CMake also builds a generated pybind11 extension
 module named after the brick `info.json` name.
 
+For a brick with custom operators, generated CMake compiles its C reference and eligible optimized
+kernels and a C++ brick-local registry into a custom operator static library. A declared optimized
+kernel's optional `.S` file is included when the assembler can compile it; otherwise its C source
+provides the fallback. The same objects are embedded in the brick core archive so SDK packaging
+includes them. Configure generates a catalog of brick types, names, and registry accessors. Runners
+look up the linked registry through this catalog without requiring the generated factory to create a
+brick first.
+
 The generated CMake is written into the installed source copy under `$COMPUTE_FLOW_HOME`; registry
 bricks must not keep handwritten `CMakeLists.txt` or root `*_pybind.cpp` files in their source
 directories. The Brick Manager rejects a managed brick root when it contains root handwritten CMake
@@ -776,7 +814,7 @@ non-zero status.
 
 ### `compute-flow update`
 
-Refreshes the local cache from the packaged and user registries, or only the file passed with
+Refreshes the local cache from the official registry and user sources, or only the file passed with
 `--registry`.
 
 Installed brick entries and their recorded `info.json` snapshots are retained even when the
@@ -794,9 +832,10 @@ compute-flow brick install tts:example-tts@2.0.0 --force
 
 The update command does not replace brick sources or reconcile model artifacts itself.
 
-For Git sources, `update` temporarily clones the repository to inspect its tags. It does not copy
-brick code into the managed install directory. If any source fails, the existing cache remains
-unchanged.
+For each registered Git repository, `update` reads `registry.txt` and the listed bricks' metadata at
+every `MAJOR.MINOR.PATCH` tag. It records each tag and exact commit for later installation. It does
+not copy brick code into the managed install directory. If any source fails, the existing cache
+remains unchanged.
 
 > Run this command after adding or removing a registry source and before commands that read the
 > local cache.
@@ -806,9 +845,10 @@ unchanged.
 Adds a Git URL to the user registry. Pass `--registry` to add it to a selected source-list file
 instead. The command accepts the same Git URL forms as `registry.txt`, including HTTPS, SSH, and
 `git@host:path` syntax. Adding the same URL again succeeds without changing the registry. This
-command does not access the source, validate its tags, or change the cache.
+command does not access the source or change the cache. The repository must contain a root
+`registry.txt` listing one or more `<type>/<variant>` directories at each `MAJOR.MINOR.PATCH` tag.
 
-Run `compute-flow update` to discover tagged versions and validate their metadata. If
+Run `compute-flow update` to read each repository's registry and validate the listed metadata. If
 `--registry <path>` was used for `registry add`, pass the same option to `update`:
 
 ```bash
@@ -824,16 +864,16 @@ The command does not install brick source code or models. After updating, use
 ### `compute-flow registry remove <source> [--registry <path>]`
 
 Removes an exact source entry from the user registry. Pass `--registry` to remove an entry from that
-selected file instead. Without the flag, packaged sources cannot be removed. A missing source is an
-error. Run `compute-flow update` afterward (with the same `--registry` option, if used) so the cache
-reflects the change.
+selected file instead. Without the flag, the official registry cannot be removed. A missing source
+is an error. Run `compute-flow update` afterward (with the same `--registry` option, if used) so the
+cache reflects the change.
 
 Removing a source does not uninstall a brick or its models. Installed brick entries and their
 metadata snapshots remain cached, as with `compute-flow update` when a source disappears.
 
 ### `compute-flow registry list [--registry <path>]`
 
-Lists the configured source entries and labels their origin as packaged or user. Pass `--registry`
+Lists the configured source entries and labels their origin as official or user. Pass `--registry`
 to list only the selected file. This command reads the source lists directly and does not refresh
 the cache or access the network. Use `compute-flow brick list` to see the brick versions discovered
 from those sources.
@@ -841,7 +881,8 @@ from those sources.
 ### `compute-flow brick list [--installed] [--type=<type>[,<type>...]]`
 
 Displays available brick versions from the local cache, along with the installed version marker and
-description. Pass `--type` with one or more comma-separated brick types to display only variants of
+description. For Git registries, the versions are the tags containing each brick, ordered
+numerically. Pass `--type` with one or more comma-separated brick types to display only variants of
 those types. Pass `--installed` to display only installed brick variants. The filters can be
 combined. If both options are omitted, the command displays all cached bricks.
 
@@ -1179,7 +1220,8 @@ Deletes model artifacts under `$COMPUTE_FLOW_HOME/models/<type>/<name>/<model-na
 
 ### `compute-flow brick info <type:name[@version]>`
 
-Displays the full cached metadata for one brick identity.
+Displays the full cached metadata for one brick identity. Without `@version`, selects the latest
+available version.
 
 Reads `$COMPUTE_FLOW_HOME/cache.json`.
 
@@ -1204,6 +1246,16 @@ Installs the implementation source tree for one selected brick version into the 
 `$COMPUTE_FLOW_HOME` directory. It does not build the brick and does not install missing model
 artifacts.
 
+When a brick includes `custom_ops/`, installation validates its
+[`schema.yaml` and operator folders](../reference/custom_ops.md) before replacing an installed
+version. Each operator requires user-supplied `reference.c` and `calculate_output_shapes.c`;
+installation rejects assembly in these portable sources and inline assembly in optimized C sources
+and rejects any extra files in an operator folder, including headers and optimized sources absent
+from `cpu/registration.yaml`. Invalid declarations stop installation without changing the installed
+brick or its custom-operator inventory. A successful install or forced replacement records the
+checked custom operator declarations in `cache.json`. Running install again without replacing the
+brick leaves its inventory entry unchanged.
+
 Reads `$COMPUTE_FLOW_HOME/cache.json` and the selected local or remote source.
 
 Writes:
@@ -1213,7 +1265,8 @@ Writes:
 - Install state in `$COMPUTE_FLOW_HOME/cache.json`.
 
 If `@version` is omitted, installs the latest available version from the cache. If `@version` is
-provided, installs that exact cached version.
+provided, installs that exact cached version. For Git registries, latest means the highest
+`MAJOR.MINOR.PATCH` tag by numeric version order. `--all` installs the latest version of each brick.
 
 Does not install more than one selected brick. Does not leave more than one installed version of the
 same brick; installing a different version of an already installed brick updates the single
@@ -1269,15 +1322,16 @@ If the brick source is a local directory then the local install is copied, not s
 copy-based workflow avoids surprising live links between development directories and installed
 state. To refresh an installed local brick after editing the original source, run with `--force`.
 
-For a Git source, the manager checks out the cached tag into temporary storage and verifies that it
-still points to the commit recorded by `update`. A moved tag is an error; rerun
-`compute-flow update` before retrying. The checked-out code is copied into the same managed brick
-source tree used for local sources, without the Git metadata directory.
+For a Git source, the manager checks out the tagged commit recorded by `update` into temporary
+storage and copies only the selected `<type>/<variant>` directory into the managed brick source
+tree. Other bricks and Git metadata are excluded. Later repository changes do not change what is
+installed from the existing cache. If the cached commit is no longer available, installation fails;
+run `compute-flow update` before retrying.
 
 ### `compute-flow brick uninstall <type:name>`
 
 Removes the installed brick source tree and every related model artifact for one brick identity,
-then updates install state.
+then updates install state and removes that brick's custom operators from the inventory.
 
 Reads `$COMPUTE_FLOW_HOME/cache.json`.
 

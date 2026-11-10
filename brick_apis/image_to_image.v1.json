@@ -1,6 +1,6 @@
 {
     "name": "image_to_image.v1",
-    "description": "Edits an input image using a text prompt.",
+    "description": "Transforms an RGB input image, optionally using a text prompt.",
     "inputs": {
         "image": {
             "index": 0,
@@ -12,7 +12,8 @@
             "index": 1,
             "dtype": "string",
             "shape": [-1],
-            "description": "Text prompt describing the requested edit."
+            "optional": true,
+            "description": "Optional text instruction describing the requested transformation."
         }
     },
     "outputs": {
@@ -20,7 +21,7 @@
             "index": 0,
             "dtype": "float32",
             "shape": ["#num_channels", "#output_height", "#output_width"],
-            "description": "Edited RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue."
+            "description": "Resulting RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue."
         }
     }
 }

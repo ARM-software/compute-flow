@@ -39,13 +39,16 @@ class RegistryCommandsTest(unittest.TestCase):
         self.addCleanup(temporary_directory.cleanup)
         self.root = Path(temporary_directory.name)
         self.state_paths = StatePaths(self.root / "state")
-        self.packaged_registry = self.root / "packaged-registry.txt"
-        self.packaged_registry.write_text("", encoding="utf-8")
+        self.official_repository = self._repository("official")
+        (self.official_repository / "registry.txt").write_text("", encoding="utf-8")
+        self._git(self.official_repository, "add", ".")
+        self._git(self.official_repository, "commit", "--quiet", "-m", "Empty registry")
+        self._git(self.official_repository, "tag", "0.0.0")
         for target in (
-            "brick_manager.registry_commands.default_registry_path",
-            "brick_manager.update.default_registry_path",
+            "brick_manager.registry.OFFICIAL_REGISTRY_URL",
+            "brick_manager.registry_commands.OFFICIAL_REGISTRY_URL",
         ):
-            patcher = mock.patch(target, return_value=self.packaged_registry)
+            patcher = mock.patch(target, self.official_repository.as_uri())
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -212,10 +215,9 @@ class RegistryCommandsTest(unittest.TestCase):
 
         self.assertEqual(load_cache(self.state_paths.cache)["bricks"], {})
 
-    def test_list_shows_packaged_and_user_sources(self) -> None:
-        packaged_source = "file:///packaged/brick.git"
+    def test_list_shows_official_and_user_sources(self) -> None:
+        official_source = self.official_repository.as_uri()
         user_source = "file:///user/brick.git"
-        self.packaged_registry.write_text(f"{packaged_source}\n", encoding="utf-8")
         self.state_paths.registry.parent.mkdir(parents=True)
         self.state_paths.registry.write_text(f"{user_source}\n", encoding="utf-8")
 
@@ -223,7 +225,7 @@ class RegistryCommandsTest(unittest.TestCase):
 
         self.assertEqual(
             [(entry.origin, entry.source) for entry in sources],
-            [("Packaged", packaged_source), ("User", user_source)],
+            [("Official", official_source), ("User", user_source)],
         )
         custom_registry = self.root / "custom-registry.txt"
         custom_registry.write_text("file:///custom/brick.git\n", encoding="utf-8")
@@ -236,8 +238,35 @@ class RegistryCommandsTest(unittest.TestCase):
             ],
             [("Selected", "file:///custom/brick.git")],
         )
-        with self.assertRaisesRegex(BrickManagerError, "packaged registry"):
-            remove_registry_source(self.state_paths, packaged_source)
+        with self.assertRaisesRegex(BrickManagerError, "official registry"):
+            remove_registry_source(self.state_paths, official_source)
+
+    def test_official_registry_needs_no_user_registry_file(self) -> None:
+        self._release(self.official_repository, "1.0.0")
+        source = self.official_repository.as_uri()
+
+        self.assertEqual(
+            [
+                (entry.origin, entry.source)
+                for entry in list_registry_sources(self.state_paths)
+            ],
+            [("Official", source)],
+        )
+        self.assertEqual(
+            add_registry_source(self.state_paths, source).status, "already_registered"
+        )
+        with self.assertRaisesRegex(BrickManagerError, "official registry"):
+            remove_registry_source(self.state_paths, source)
+
+        result = update_cache(self.state_paths)
+
+        self.assertEqual(result.brick_versions, 1)
+        self.assertIsNone(result.registry_path)
+        self.assertIsNone(result.user_registry_path)
+        self.assertFalse(self.state_paths.registry.exists())
+        self.assertEqual(
+            set(load_cache(self.state_paths.cache)["bricks"]), {"tts:example"}
+        )
 
     def test_remove_preserves_installed_brick(self) -> None:
         repository = self._repository("installed")
@@ -247,7 +276,7 @@ class RegistryCommandsTest(unittest.TestCase):
         cache = load_cache(self.state_paths.cache)
         entry = cache["bricks"]["tts:example"]["1.0.0"]
         entry["metadata"]["installed"] = True
-        entry["metadata"]["installed_source_path"] = str(repository)
+        entry["metadata"]["installed_source_path"] = str(repository / "tts/example")
         entry["metadata"]["installed_info_json"] = entry["info_json"]
         write_cache(self.state_paths.cache, cache)
 
@@ -265,9 +294,26 @@ class RegistryCommandsTest(unittest.TestCase):
         self._release(repository, "1.0.0")
         add_registry_source(self.state_paths, repository.as_uri())
 
-        result = update_cache(self.state_paths, str(self.packaged_registry))
+        custom_registry = self.root / "empty-registry.txt"
+        custom_registry.write_text("", encoding="utf-8")
+        self._release(self.official_repository, "2.0.0")
+
+        result = update_cache(self.state_paths, str(custom_registry))
 
         self.assertEqual(result.brick_versions, 0)
+
+    def test_update_reads_all_default_and_user_registries(self) -> None:
+        official = self.official_repository
+        additional = self._repository("additional")
+        self._release(official, "1.0.0")
+        self._release(additional, "2.0.0")
+        add_registry_source(self.state_paths, additional.as_uri())
+
+        result = update_cache(self.state_paths)
+
+        self.assertEqual(result.brick_versions, 2)
+        versions = load_cache(self.state_paths.cache)["bricks"]["tts:example"]
+        self.assertEqual(set(versions), {"1.0.0", "2.0.0"})
 
     def _repository(self, name: str) -> Path:
         repository = self.root / name
@@ -287,16 +333,19 @@ class RegistryCommandsTest(unittest.TestCase):
             "version": version,
             "models": {},
         }
-        (repository / "info.json").write_text(json.dumps(info_json), encoding="utf-8")
-        (repository / "Example.cpp").write_text("", encoding="utf-8")
-        (repository / "Example.h").write_text(
+        source = repository / "tts/example"
+        source.mkdir(parents=True, exist_ok=True)
+        (repository / "registry.txt").write_text("tts/example\n", encoding="utf-8")
+        (source / "info.json").write_text(json.dumps(info_json), encoding="utf-8")
+        (source / "Example.cpp").write_text("", encoding="utf-8")
+        (source / "Example.h").write_text(
             "namespace compute_flow::bricks::tts {\n"
             "class Example : public BrickBaseV1 {\n"
             '  std::string_view api() const noexcept override { return "tts.v1"; }\n'
             "};\n}\n",
             encoding="utf-8",
         )
-        self._git(repository, "add", "info.json", "Example.cpp", "Example.h")
+        self._git(repository, "add", ".")
         self._git(repository, "commit", "--quiet", "-m", f"Release {version}")
         self._git(repository, "tag", version)
 

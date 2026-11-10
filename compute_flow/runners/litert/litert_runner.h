@@ -18,7 +18,13 @@
 #include <unordered_map>
 #include <vector>
 
+namespace compute_flow::custom_ops {
+class Registry;
+}
+
 namespace compute_flow {
+
+struct BrickInfo;
 
 class LiteRTRunner {
 public:
@@ -29,7 +35,7 @@ public:
     LiteRTRunner(LiteRTRunner&&) noexcept;
     LiteRTRunner& operator=(LiteRTRunner&&) noexcept;
 
-    void setup(const ModelData& model, ProfilerView profiler = {});
+    void setup(const ModelData& model, const BrickInfo&, ProfilerView profiler = {});
     void run();
     const std::string& model_name() const;
     void map_input(std::string_view key, size_t idx);
@@ -68,6 +74,8 @@ private:
     ModelData _compiled_model_data;
     ProfilerView _profiler;
     ExecutionMode _execution_mode {ExecutionMode::CompiledModel};
+    // Retained when a compiled model must be rebuilt after an input resize.
+    const custom_ops::Registry* _custom_ops_registry = nullptr;
     std::unique_ptr<CompiledModelState> _compiled_model;
     std::unique_ptr<InterpreterState> _interpreter;
     std::vector<TensorData> _inputs;

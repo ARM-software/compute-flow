@@ -21,12 +21,12 @@ reports.
 
 ## What can you do with Compute Flow?
 
-Compute Flow helps you build on-device AI applications by:
+Compute Flow helps you easily build on-device AI applications by:
 
 1. [**Discovering, installing, and testing bricks**](docs/howto/getting_started.md)
 
    With Brick Manager, you can discover, install, and test bricks for speech recognition, language
-   models, text-to-speech, and object detection.
+   models, text-to-speech, object detection, and much more.
 
 2. [**Building AI pipelines**](docs/examples/python/audio_to_audio_translation.md)
 
@@ -70,7 +70,7 @@ packages, and builds Compute Flow for the selected target. A typical native work
 3. Build Compute Flow for the target platform.
 4. Run the Python or C++ CLI example.
 
-This example installs the pre-packaged Qwen3-TTS text-to-speech (TTS) brick in Compute Flow and runs
+This example installs the Qwen3-TTS text-to-speech (TTS) brick from the official registry and runs
 the native CLI examples.
 
 ```bash
@@ -113,9 +113,6 @@ For a full native and Android™ walkthrough, see the
 [getting started guide](docs/howto/getting_started.md).
 
 ### Using bricks from the open source community
-
-In addition to the pre-packaged bricks included with Compute Flow, you can install
-community-developed bricks from Git repositories.
 
 To add a community Git repository and install one of its brick models, run:
 

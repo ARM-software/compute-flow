@@ -41,6 +41,8 @@ void print_usage(const char* executable) {
                  "  -k <top_k>             Maximum number of classes to display (default: 5).\n"
                  "  -t <thread_spec>       Default threads and optional model overrides (default: 1).\n"
                  "  --enable-op-profiling  Enable per-operation profiling.\n"
+                 "  --num-ops-displayed <count>  Maximum number of ops displayed per model when "
+                 "--enable-op-profiling is enabled (default: 5)\n"
                  "  -h                     Show this help message.\n",
                  executable);
 }
@@ -75,7 +77,7 @@ void display_result(const TensorDict& output, int64_t top_k) {
 }
 
 void run_single(std::string manifest_path, const std::string& thread_spec, bool enable_op_profiling,
-                const std::string& image_value, int64_t top_k) {
+                size_t num_ops_displayed, const std::string& image_value, int64_t top_k) {
     // Parse the number of CPU threads to use
     std::size_t default_threads = 1;
     const auto model_threads = internal::parse_hint_cpu_threads(thread_spec, default_threads);
@@ -94,6 +96,7 @@ void run_single(std::string manifest_path, const std::string& thread_spec, bool 
     BrickOptions options;
     options.runtime.enable_warmup = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     // Setup the brick
     brick->setup(manifest, options);
@@ -127,7 +130,7 @@ void run_single(std::string manifest_path, const std::string& thread_spec, bool 
 }
 
 void run_multiple(std::string manifest_path, const std::string& thread_spec, bool enable_op_profiling,
-                  const std::string& runs_file) {
+                  size_t num_ops_displayed, const std::string& runs_file) {
     // Parse the number of CPU threads to use
     std::size_t default_threads = 1;
     const auto model_threads = internal::parse_hint_cpu_threads(thread_spec, default_threads);
@@ -146,6 +149,7 @@ void run_multiple(std::string manifest_path, const std::string& thread_spec, boo
     BrickOptions options;
     options.runtime.enable_warmup = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     // Setup the brick
     brick->setup(manifest, options);
@@ -203,8 +207,10 @@ int32_t run_cli(int32_t argc, char** argv) {
     int64_t top_k = k_default_top_k;
     bool has_top_k_argument = false;
     bool enable_op_profiling = false;
+    size_t num_ops_displayed = 5;
 
     static option long_options[] = {{"enable-op-profiling", no_argument, nullptr, 1001},
+                                    {"num-ops-displayed", required_argument, nullptr, 1002},
                                     {"help", no_argument, nullptr, 'h'},
                                     {nullptr, 0, nullptr, 0}};
 
@@ -238,6 +244,12 @@ int32_t run_cli(int32_t argc, char** argv) {
             case 1001:
                 enable_op_profiling = true;
                 break;
+            case 1002:
+                if (!internal::parse_num_ops_displayed(optarg, num_ops_displayed)) {
+                    std::cerr << "--num-ops-displayed must be a positive integer." << std::endl;
+                    return EXIT_FAILURE;
+                }
+                break;
             case 'h':
                 print_usage(argv[0]);
                 return EXIT_SUCCESS;
@@ -255,9 +267,9 @@ int32_t run_cli(int32_t argc, char** argv) {
     }
 
     if (!json_file.empty()) {
-        run_multiple(manifest_path, thread_spec, enable_op_profiling, json_file);
+        run_multiple(manifest_path, thread_spec, enable_op_profiling, num_ops_displayed, json_file);
     } else {
-        run_single(manifest_path, thread_spec, enable_op_profiling, image_path, top_k);
+        run_single(manifest_path, thread_spec, enable_op_profiling, num_ops_displayed, image_path, top_k);
     }
 
     return EXIT_SUCCESS;

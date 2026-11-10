@@ -13,7 +13,7 @@
 
 cmake_minimum_required(VERSION 3.24)
 
-project(@PROJECT_NAME@ LANGUAGES CXX)
+project(@PROJECT_NAME@ LANGUAGES @PROJECT_LANGUAGES@)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -47,4 +47,5 @@ target_link_libraries(
         compute_flow::compute_flow
 )
 @DEPENDENCY_LINK_BLOCK@
+@REFERENCE_BLOCK@
 @PYBIND_BLOCK@

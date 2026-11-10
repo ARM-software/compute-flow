@@ -62,7 +62,10 @@ class CreateBrickTemplateTest(unittest.TestCase):
             self.assertIn(
                 '// COMPUTE_FLOW_VALIDATE(manifest.has_module("model"))', source
             )
-            self.assertIn('// _runner->setup(manifest["model"], profiler);', source)
+            self.assertIn(
+                '// _runner->setup(manifest["model"], manifest.get_brick_info(), profiler);',
+                source,
+            )
             self.assertIn("run_impl(input, profiler);", source)
             self.assertIn("TODO: implement model-specific inference", source)
             self.assertIn(

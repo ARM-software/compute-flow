@@ -38,13 +38,15 @@ void print_usage(const char* name) {
             "  -t <thread_spec>          Number of threads to use. Specify a default for all models and optionally "
             "override individual models, e.g. <default_num_threads>,<model_name0>:2,<model_name1>:4 (default: 1)\n"
             "  --enable-op-profiling     Enable per-op profiling (default: off)\n"
+            "  --num-ops-displayed <count>  Maximum number of ops displayed per model when "
+            "--enable-op-profiling is enabled (default: 5)\n"
             "  -o <output_file>          (Optional) Output audio file name (Default: output.wav)\n"
             "  -h                        Show this help message\n",
             name);
 }
 
 void run_single(std::string manifest_path, const std::string& prompt, const std::optional<std::string>& output_path,
-                const std::string& thread_spec, bool enable_op_profiling) {
+                const std::string& thread_spec, bool enable_op_profiling, size_t num_ops_displayed) {
     size_t default_threads   = 1;
     const auto model_threads = internal::parse_hint_cpu_threads(thread_spec, default_threads);
     manifest_path            = compute_flow::bricks::internal::get_manifest_path(manifest_path, "tts");
@@ -61,6 +63,7 @@ void run_single(std::string manifest_path, const std::string& prompt, const std:
     BrickOptions options;
     options.runtime.enable_warmup         = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     // Setup the brick
     brick->setup(manifest, options);
@@ -139,7 +142,7 @@ void run_single(std::string manifest_path, const std::string& prompt, const std:
 }
 
 void run_multiple(std::string manifest_path, const std::string& runs_file, const std::string& thread_spec,
-                  bool enable_op_profiling) {
+                  bool enable_op_profiling, size_t num_ops_displayed) {
     size_t default_threads   = 1;
     const auto model_threads = internal::parse_hint_cpu_threads(thread_spec, default_threads);
     manifest_path            = compute_flow::bricks::internal::get_manifest_path(manifest_path, "tts");
@@ -156,6 +159,7 @@ void run_multiple(std::string manifest_path, const std::string& runs_file, const
     BrickOptions options;
     options.runtime.enable_warmup         = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     // Setup the brick
     brick->setup(manifest, options);
@@ -262,8 +266,10 @@ int32_t run_cli(int32_t argc, char** argv) {
     std::string output_file_name = "";
     std::string json_file;
     bool enable_op_profiling = false;
+    size_t num_ops_displayed = 5;
 
     static struct option long_options[] = {{"enable-op-profiling", no_argument, nullptr, 1001},
+                                           {"num-ops-displayed", required_argument, nullptr, 1002},
                                            {"help", no_argument, nullptr, 'h'},
                                            {nullptr, 0, nullptr, 0}};
 
@@ -288,6 +294,12 @@ int32_t run_cli(int32_t argc, char** argv) {
             case 1001:
                 enable_op_profiling = true;
                 break;
+            case 1002:
+                if (!internal::parse_num_ops_displayed(optarg, num_ops_displayed)) {
+                    std::cerr << "--num-ops-displayed must be a positive integer." << std::endl;
+                    return EXIT_FAILURE;
+                }
+                break;
             case 'h':
             default:
                 print_usage(argv[0]);
@@ -305,9 +317,9 @@ int32_t run_cli(int32_t argc, char** argv) {
 
     const bool multiple_runs_mode = !json_file.empty();
     if (multiple_runs_mode) {
-        run_multiple(manifest_path, json_file, thread_spec, enable_op_profiling);
+        run_multiple(manifest_path, json_file, thread_spec, enable_op_profiling, num_ops_displayed);
     } else {
-        run_single(manifest_path, txt_prompt, output_file_name, thread_spec, enable_op_profiling);
+        run_single(manifest_path, txt_prompt, output_file_name, thread_spec, enable_op_profiling, num_ops_displayed);
     }
 
     return EXIT_SUCCESS;

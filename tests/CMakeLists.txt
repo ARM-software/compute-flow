@@ -5,15 +5,74 @@
 #
 
 set(COMPUTE_FLOW_TEST_SENTENCEPIECE_MODEL "" CACHE FILEPATH "Local tokenizer for decode runner contract tests")
+add_executable(custom_op_memory_manager_tests custom_ops/memory_manager_tests.cpp)
+target_link_libraries(custom_op_memory_manager_tests PRIVATE compute_flow::compute_flow)
+add_test(NAME custom_op_memory_manager COMMAND custom_op_memory_manager_tests)
+
+add_executable(custom_op_thread_dispatch_tests custom_ops/thread_dispatch_tests.cpp)
+target_link_libraries(custom_op_thread_dispatch_tests PRIVATE compute_flow::compute_flow)
+add_test(NAME custom_op_thread_dispatch COMMAND custom_op_thread_dispatch_tests)
+
+add_executable(custom_op_cpu_dispatch_tests custom_ops/cpu_dispatch_tests.cpp)
+target_link_libraries(custom_op_cpu_dispatch_tests PRIVATE compute_flow::compute_flow)
+add_test(NAME custom_op_cpu_dispatch COMMAND custom_op_cpu_dispatch_tests)
+
+if(COMPUTE_FLOW_ENABLE_LITERT)
+    set(COMPUTE_FLOW_CUSTOM_OPS_CATALOG_INCLUDES
+        [=[
+namespace compute_flow::custom_ops {
+const Registry& test_add_sub_registry();
+const Registry& test_add_sub_i8_registry();
+const Registry& test_add_sub_optimized_registry();
+const Registry& test_add_sub_repeated_registry();
+const Registry& test_add_sub_bad_shapes_registry();
+const Registry& test_add_sub_future_registry();
+const Registry& test_add_sub_fail_registry();
+}
+]=]
+    )
+    set(COMPUTE_FLOW_CUSTOM_OPS_CATALOG_ENTRIES
+        [=[
+    {"tests", "AddSub", &test_add_sub_registry},
+    {"tests", "AddSubI8", &test_add_sub_i8_registry},
+    {"tests", "AddSubOptimized", &test_add_sub_optimized_registry},
+    {"tests", "AddSubRepeated", &test_add_sub_repeated_registry},
+    {"tests", "AddSubBadShapes", &test_add_sub_bad_shapes_registry},
+    {"tests", "AddSubFuture", &test_add_sub_future_registry},
+    {"tests", "AddSubFail", &test_add_sub_fail_registry},
+]=]
+    )
+    set(COMPUTE_FLOW_CUSTOM_OPS_CATALOG_COUNT 7)
+    set(test_catalog_source "${CMAKE_CURRENT_BINARY_DIR}/custom_ops/compiled_registry_catalog.cpp")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/compute_flow/custom_ops/compiled_registry_catalog.cpp.in"
+        "${test_catalog_source}"
+        @ONLY
+    )
+    add_executable(
+        custom_op_litert_tests
+        custom_ops/litert_integration_tests.cpp
+        custom_ops/fixtures/reference_kernels.c
+        "${test_catalog_source}"
+    )
+    target_compile_definitions(custom_op_litert_tests PRIVATE COMPUTE_FLOW_HAS_LITERT)
+    target_include_directories(custom_op_litert_tests PRIVATE "${CMAKE_SOURCE_DIR}/compute_flow")
+    target_link_libraries(custom_op_litert_tests PRIVATE compute_flow::compute_flow litert::litert)
+    add_test(
+        NAME custom_op_litert
+        COMMAND
+            "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/custom_ops/run_litert_integration.py"
+            "$<TARGET_FILE:custom_op_litert_tests>"
+    )
+endif()
+
 if(COMPUTE_FLOW_ENABLE_SENTENCEPIECE AND COMPUTE_FLOW_TEST_SENTENCEPIECE_MODEL)
     add_executable(sentencepiece_decode_tests runners/sentencepiece_decode_tests.cpp)
     target_link_libraries(sentencepiece_decode_tests PRIVATE compute_flow::compute_flow)
     add_test(NAME sentencepiece_decode COMMAND sentencepiece_decode_tests "${COMPUTE_FLOW_TEST_SENTENCEPIECE_MODEL}")
 endif()
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/bricks")
-    add_test(NAME brick_metadata COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/bricks/test_metadata.py")
-endif()
+add_test(NAME brick_metadata COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/bricks/test_metadata.py")
 
 add_test(
     NAME brick_manager_catalog
@@ -72,11 +131,13 @@ set(COMPUTE_FLOW_CLI_SMOKE_TARGETS
 )
 
 foreach(cli_target IN LISTS COMPUTE_FLOW_CLI_SMOKE_TARGETS)
-    add_test(
-        NAME "${cli_target}_smoke"
-        COMMAND
-            "${CMAKE_COMMAND}" "-DCLI_PATH=$<TARGET_FILE:${cli_target}>" -P
-            "${CMAKE_CURRENT_SOURCE_DIR}/cli_help_smoke.cmake"
-    )
-    set_tests_properties("${cli_target}_smoke" PROPERTIES LABELS "cli;cli_help;smoke" TIMEOUT 15)
+    if(TARGET "${cli_target}")
+        add_test(
+            NAME "${cli_target}_smoke"
+            COMMAND
+                "${CMAKE_COMMAND}" "-DCLI_PATH=$<TARGET_FILE:${cli_target}>" -P
+                "${CMAKE_CURRENT_SOURCE_DIR}/cli_help_smoke.cmake"
+        )
+        set_tests_properties("${cli_target}_smoke" PROPERTIES LABELS "cli;cli_help;smoke" TIMEOUT 15)
+    endif()
 endforeach()

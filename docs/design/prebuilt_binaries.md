@@ -9,7 +9,7 @@
 Compute Flow uses prebuilt dependency libraries to reduce build time. A dependency release contains
 library archives, a manifest, checksums, and license information. The build downloads the enabled
 libraries from release assets, trying the configured mirrors in order. The packages are mirrored on
-[GitHub](https://github.com/ARM-software/compute-flow/releases). A package registry is not required.
+[GitHub](https://github.com/ARM-software/ComputeFlow/releases). A package registry is not required.
 
 ## Versioning and storage
 
