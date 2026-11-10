@@ -8,8 +8,12 @@
 #ifdef COMPUTE_FLOW_HAS_LITERT
 
 #include "runners/litert/litert_runner.h"
+#include "runners/litert/common/buffer_lock.h"
+#include "runners/litert/custom_ops/registration.h"
 
 #include "compute_flow/check.h"
+#include "compute_flow/custom_ops/registry.h"
+#include "compute_flow/manifest.h"
 
 #include "litert/c/litert_compiled_model.h"
 #include "litert/c/litert_environment.h"
@@ -39,6 +43,7 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -195,6 +200,50 @@ void check(LiteRtStatus status, const char* action) {
             std::string(action) + ": " + LiteRtGetStatusString(status) + " (" +
             std::to_string(static_cast<int>(status)) + ")");
     }
+}
+
+bool model_has_custom_ops(LiteRtModel model) {
+    LiteRtParamIndex subgraph_count = 0;
+    check(LiteRtGetNumModelSubgraphs(model, &subgraph_count), "Get LiteRT subgraphs");
+
+    for (LiteRtParamIndex subgraph_index = 0; subgraph_index < subgraph_count; ++subgraph_index) {
+        LiteRtSubgraph subgraph = nullptr;
+        check(LiteRtGetModelSubgraph(model, subgraph_index, &subgraph), "Get LiteRT subgraph");
+        LiteRtParamIndex op_count = 0;
+        check(LiteRtGetNumSubgraphOps(subgraph, &op_count), "Get LiteRT subgraph ops");
+
+        for (LiteRtParamIndex op_index = 0; op_index < op_count; ++op_index) {
+            LiteRtOp op = nullptr;
+            LiteRtOpCode code{};
+            check(LiteRtGetSubgraphOp(subgraph, op_index, &op), "Get LiteRT op");
+            check(LiteRtGetOpCode(op, &code), "Get LiteRT op code");
+            if (code == kLiteRtOpCodeTflCustom) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool model_has_custom_ops(const std::string& path) {
+    struct ModelProbe {
+        LiteRtEnvironment environment = nullptr;
+        LiteRtModel model = nullptr;
+
+        ~ModelProbe() {
+            if (model != nullptr) {
+                LiteRtDestroyModel(model);
+            }
+            if (environment != nullptr) {
+                LiteRtDestroyEnvironment(environment);
+            }
+        }
+    } probe;
+
+    check(LiteRtCreateEnvironment(0, nullptr, &probe.environment), "Create LiteRT environment");
+    check(LiteRtCreateModelFromFile(probe.environment, path.c_str(), &probe.model), "Load LiteRT model");
+    return model_has_custom_ops(probe.model);
 }
 
 bool model_has_fp16_weights(LiteRtModel model) {
@@ -473,10 +522,8 @@ std::vector<uint8_t> read_buffer(LiteRtTensorBuffer buffer) {
     size_t size = 0;
     check(LiteRtGetTensorBufferPackedSize(buffer, &size), "Get LiteRT buffer size");
     std::vector<uint8_t> contents(size);
-    void* data = nullptr;
-    check(LiteRtLockTensorBuffer(buffer, &data, kLiteRtTensorBufferLockModeRead), "Lock LiteRT buffer");
-    std::memcpy(contents.data(), data, size);
-    check(LiteRtUnlockTensorBuffer(buffer), "Unlock LiteRT buffer");
+    litert::LiteRTBufferLock lock(buffer, kLiteRtTensorBufferLockModeRead);
+    std::memcpy(contents.data(), lock.data(), size);
     return contents;
 }
 
@@ -484,10 +531,8 @@ void write_buffer(LiteRtTensorBuffer buffer, const void* source, size_t source_s
     size_t size = 0;
     check(LiteRtGetTensorBufferPackedSize(buffer, &size), "Get LiteRT buffer size");
     if (source_size != size) throw std::invalid_argument("LiteRT buffer size mismatch");
-    void* data = nullptr;
-    check(LiteRtLockTensorBuffer(buffer, &data, kLiteRtTensorBufferLockModeWrite), "Lock LiteRT buffer");
-    std::memcpy(data, source, size);
-    check(LiteRtUnlockTensorBuffer(buffer), "Unlock LiteRT buffer");
+    litert::LiteRTBufferLock lock(buffer, kLiteRtTensorBufferLockModeWrite);
+    std::memcpy(lock.data(), source, size);
 }
 
 void configure_cpu(LiteRtOptions options, const CpuOptions& cpu_options, bool enable_fp16) {
@@ -547,6 +592,8 @@ struct LiteRTRunner::CompiledModelState {
     // LiteRT registrations retain custom-op name pointers from these options.
     LiteRtOptions options {nullptr};
     LiteRtProfiler profiler {nullptr};
+    // LiteRT may call into these adapters until the compiled model is destroyed.
+    std::unique_ptr<custom_ops::LiteRTCustomOps> custom_ops;
     std::vector<LiteRtTensorBuffer> inputs;
     std::vector<LiteRtTensorBuffer> outputs;
     std::vector<LiteRtElementType> input_types;
@@ -607,10 +654,17 @@ LiteRTRunner::~LiteRTRunner() = default;
 LiteRTRunner::LiteRTRunner(LiteRTRunner&&) noexcept = default;
 LiteRTRunner& LiteRTRunner::operator=(LiteRTRunner&&) noexcept = default;
 
-void LiteRTRunner::setup(const ModelData& model, ProfilerView profiler) {
-    // Dynamic outputs need their final shape after Invoke; fixed outputs keep the compiled path.
-    _execution_mode = has_dynamic_output_interpreter(model.model_path) ? ExecutionMode::Interpreter
-                                                                 : ExecutionMode::CompiledModel;
+void LiteRTRunner::setup(const ModelData& model, const BrickInfo& brick_info, ProfilerView profiler) {
+    _custom_ops_registry = custom_ops::find_compiled_registry(brick_info);
+
+    // Custom kernels infer dynamic output layouts before Invoke. Other dynamic outputs need the
+    // interpreter to report their final shape after Invoke.
+    const bool dynamic_output = has_dynamic_output_interpreter(model.model_path);
+    const bool compiled_custom_op = dynamic_output && _custom_ops_registry != nullptr &&
+        _custom_ops_registry->size() != 0 && model_has_custom_ops(model.model_path);
+    _execution_mode = dynamic_output && !compiled_custom_op
+        ? ExecutionMode::Interpreter
+        : ExecutionMode::CompiledModel;
     switch (_execution_mode) {
         case ExecutionMode::CompiledModel:
             setup_compiled_model(model, profiler);
@@ -622,7 +676,9 @@ void LiteRTRunner::setup(const ModelData& model, ProfilerView profiler) {
 }
 
 void LiteRTRunner::setup_compiled_model(const ModelData& model, ProfilerView profiler) {
-    if (model.acc_config.priorities.empty()) throw std::invalid_argument("LiteRT requires an accelerator");
+    if (model.acc_config.priorities.empty()) {
+        throw std::invalid_argument("LiteRT requires an accelerator");
+    }
     const auto& accelerator = model.acc_config.priorities.front();
 #ifndef __ANDROID__
     if (accelerator.type == AcceleratorType::Gpu) {
@@ -644,7 +700,9 @@ void LiteRTRunner::setup_compiled_model(const ModelData& model, ProfilerView pro
             break;
         case AcceleratorType::Gpu:
             hardware = kLiteRtHwAcceleratorGpu;
-            if (enable_cpu_fallback) hardware |= kLiteRtHwAcceleratorCpu;
+            if (enable_cpu_fallback) {
+                hardware |= kLiteRtHwAcceleratorCpu;
+            }
             break;
         default:
             throw std::invalid_argument("LiteRT received an unsupported accelerator");
@@ -653,7 +711,9 @@ void LiteRTRunner::setup_compiled_model(const ModelData& model, ProfilerView pro
         throw std::invalid_argument("LiteRT supports only the default GPU device");
     }
 #if defined(__ANDROID__) && defined(COMPUTE_FLOW_HAS_LITERT_GPU)
-    if (use_gpu) register_gpu_accelerator();
+    if (use_gpu) {
+        register_gpu_accelerator();
+    }
 #endif
     auto compiled_model = std::make_unique<CompiledModelState>();
     compiled_model->use_host_memory = accelerator.type == AcceleratorType::Cpu || enable_cpu_fallback;
@@ -672,7 +732,9 @@ void LiteRTRunner::setup_compiled_model(const ModelData& model, ProfilerView pro
         "Load model");
     LiteRtParamIndex signatures = 0;
     check(LiteRtGetNumModelSignatures(compiled_model->model, &signatures), "Get signatures");
-    if (signatures == 0) throw std::invalid_argument("LiteRT model has no signature");
+    if (signatures == 0) {
+        throw std::invalid_argument("LiteRT model has no signature");
+    }
     check(LiteRtGetModelSignature(compiled_model->model, k_signature, &compiled_model->signature), "Get signature");
 
     LiteRtOptions& options = compiled_model->options;
@@ -685,7 +747,9 @@ void LiteRTRunner::setup_compiled_model(const ModelData& model, ProfilerView pro
         configure_cpu(options, cpu_options, enable_fp16);
     } else if (enable_cpu_fallback) {
         for (const auto& fallback : model.acc_config.priorities) {
-            if (fallback.type != AcceleratorType::Cpu) continue;
+            if (fallback.type != AcceleratorType::Cpu) {
+                continue;
+            }
             const auto& cpu_options = std::get<CpuOptions>(fallback.params);
             const bool enable_fp16 = cpu_options.enable_fp16 || model_has_fp16_weights(compiled_model->model) ||
                 model_has_fp16_marker(model.model_path);
@@ -693,13 +757,34 @@ void LiteRTRunner::setup_compiled_model(const ModelData& model, ProfilerView pro
             break;
         }
     }
-    if (profiler.is_per_op_profiling_enabled()) configure_profiling(options);
+    if (profiler.is_per_op_profiling_enabled()) {
+        configure_profiling(options);
+    }
+
+    if ((_custom_ops_registry == nullptr || _custom_ops_registry->size() == 0) &&
+        model_has_custom_ops(compiled_model->model)) {
+        throw std::invalid_argument("Missing compiled registry for LiteRT custom operator");
+    }
+
+    if (_custom_ops_registry != nullptr) {
+        compiled_model->custom_ops = std::make_unique<custom_ops::LiteRTCustomOps>(*_custom_ops_registry);
+        compiled_model->custom_ops->register_cpu_model_custom_ops(
+            compiled_model->model, options, std::get<CpuOptions>(accelerator.params).num_threads);
+    }
+
     const auto compile_status =
         LiteRtCreateCompiledModel(compiled_model->environment, compiled_model->model, options, &compiled_model->compiled);
+    if (compiled_model->custom_ops != nullptr && compiled_model->custom_ops->consume_failure()) {
+        throw std::invalid_argument("LiteRT custom operator output shape inference failed");
+    }
+
     check(compile_status, "Compile model");
+
     if (profiler.is_per_op_profiling_enabled()) {
         check(LiteRtCompiledModelGetProfiler(compiled_model->compiled, &compiled_model->profiler), "Get profiler");
-        if (!compiled_model->profiler) throw std::runtime_error("LiteRT profiler was not created");
+        if (!compiled_model->profiler) {
+            throw std::runtime_error("LiteRT profiler was not created");
+        }
     }
 
     LiteRtParamIndex input_count = 0;
@@ -922,15 +1007,17 @@ void LiteRTRunner::run_compiled_model() {
         check(LiteRtResetProfiler(_compiled_model->profiler), "Reset profiler");
         check(LiteRtStartProfiler(_compiled_model->profiler), "Start profiler");
     }
-    check(
-        LiteRtRunCompiledModel(
+    const LiteRtStatus run_status = LiteRtRunCompiledModel(
             _compiled_model->compiled,
             k_signature,
             _compiled_model->inputs.size(),
             _compiled_model->inputs.data(),
             _compiled_model->outputs.size(),
-            _compiled_model->outputs.data()),
-        "Run model");
+            _compiled_model->outputs.data());
+    if (_compiled_model->custom_ops != nullptr && _compiled_model->custom_ops->consume_failure()) {
+        check(kLiteRtStatusErrorRuntimeFailure, "LiteRT custom operator");
+    }
+    check(run_status, "Run model");
     _compiled_model->has_run = true;
     if (_compiled_model->profiler) {
         check(LiteRtStopProfiler(_compiled_model->profiler), "Stop profiler");
@@ -943,11 +1030,18 @@ void LiteRTRunner::run_compiled_model() {
                 "Read profiler events");
         }
         for (const auto& event : _compiled_model->profile_events) {
-            if (!is_operator_profile_event(event.event_type)) continue;
+            if (!is_operator_profile_event(event.event_type)) {
+                continue;
+            }
+
+            const std::string operator_name = event.tag ? event.tag : "UNKNOWN";
+            const std::string_view label = _compiled_model->custom_ops == nullptr
+                ? std::string_view(operator_name)
+                : _compiled_model->custom_ops->profile_label(operator_name);
             _profiler.add_nested_sample(
                 "litert",
                 _model_name,
-                event.tag ? event.tag : "UNKNOWN",
+                label,
                 static_cast<long long>(event.elapsed_time_us) * 1'000);
         }
     }

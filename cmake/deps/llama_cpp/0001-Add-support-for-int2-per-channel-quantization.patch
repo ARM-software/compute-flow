@@ -31,10 +31,10 @@ index 83f9118da..613a7391a 100644
  // Super-block quantization structures
  //
 diff --git a/ggml/src/ggml-cpu/CMakeLists.txt b/ggml/src/ggml-cpu/CMakeLists.txt
-index 836bae4d0..864ba9a92 100644
+index 836bae4d0..fb0946249 100644
 --- a/ggml/src/ggml-cpu/CMakeLists.txt
 +++ b/ggml/src/ggml-cpu/CMakeLists.txt
-@@ -583,51 +583,34 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+@@ -583,51 +583,37 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
 
          # Fetch KleidiAI sources:
          include(FetchContent)
@@ -54,6 +54,9 @@ index 836bae4d0..864ba9a92 100644
 +        FetchContent_Declare(KleidiAI_Download
 +            GIT_REPOSITORY ${KLEIDIAI_GIT_REPOSITORY}
 +            GIT_TAG        ${KLEIDIAI_GIT_TAG}
++            # Only populate sources; ggml-cpu compiles the kernels it needs.
++            # A nonexistent subdirectory prevents adding KleidiAI's standalone project.
++            SOURCE_SUBDIR  compute-flow-source-only
          )
 -        if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
 -            list(APPEND KLEIDIAI_FETCH_ARGS DOWNLOAD_EXTRACT_TIMESTAMP NEW)
@@ -105,7 +108,7 @@ index 836bae4d0..864ba9a92 100644
          # KleidiAI
          include_directories(
              ${KLEIDIAI_SRC}/
-@@ -638,94 +621,327 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+@@ -638,94 +624,327 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
              ${KLEIDIAI_SRC}/kai/ukernels/matmul/matmul_clamp_f32_qai8dxp_qsi8cxp/
              ${KLEIDIAI_SRC}/kai/ukernels/matmul/matmul_clamp_fp32_bf16p_bf16p/
              ${KLEIDIAI_SRC}/kai/ukernels/matmul/matmul_clamp_f32_f16p_qsi4c32p/

@@ -58,17 +58,19 @@ std::vector<float> pad_image_chw(const std::vector<float>& image, int32_t width,
 
 void print_usage(const char* executable) {
     std::fprintf(stderr,
-                 "Usage: %s -m <manifest.json> (-i <input_image> -p <prompt> | -j <runs.json>) [-o <output.png>] "
+                 "Usage: %s -m <manifest.json> (-i <input_image> [-p <prompt>] | -j <runs.json>) [-o <output.png>] "
                  "[-t <thread_spec>]\n\n"
                  "Options:\n"
                  "  -m <manifest.json>     Manifest path or @manifest/... selector.\n"
                  "  -i <input_image>       Image path or @sample/... selector.\n"
-                 "  -p <prompt>            Natural-language editing instruction.\n"
+                 "  -p <prompt>            Optional text instruction for the transformation.\n"
                  "  -j <runs.json>         Input JSON file path for multiple run settings.\n"
                  "  -o <output.png>        Output PNG path (default: <input>_edited.png).\n"
                  "  -t <thread_spec>       Default threads and optional model overrides, e.g. "
                  "4,text_encoder:2 (default: 1).\n"
                  "  --enable-op-profiling  Enable per-operation profiling.\n"
+                 "  --num-ops-displayed <count>  Maximum number of ops displayed per model when "
+                 "--enable-op-profiling is enabled (default: 5)\n"
                  "  -h                     Show this help message.\n",
                  executable);
 }
@@ -83,7 +85,7 @@ std::string default_output_path(const std::string& input_path) {
 }
 
 void run_single(IBrickV1& brick, const std::string& manifest_path, const std::string& input_value,
-                const std::string& prompt, const std::optional<std::string>& output_path) {
+                const std::optional<std::string>& prompt, const std::optional<std::string>& output_path) {
     const std::string input_path = internal::get_sample_path(input_value, manifest_path);
     int32_t width                = 0;
     int32_t height               = 0;
@@ -105,10 +107,13 @@ void run_single(IBrickV1& brick, const std::string& manifest_path, const std::st
     TensorDict input;
 
     // Set the input
-    input.declare_tensor("image").format  = {DataType::F32, {k_num_channels, height, width}};
-    input["image"].data                   = image.data();
-    input.declare_tensor("prompt").format = {DataType::String, {static_cast<int64_t>(prompt.size())}};
-    input["prompt"].data                  = const_cast<char*>(prompt.data());
+    input.declare_tensor("image").format = {DataType::F32, {k_num_channels, height, width}};
+    input["image"].data                  = image.data();
+
+    if (prompt.has_value()) {
+        input.declare_tensor("prompt").format = {DataType::String, {static_cast<int64_t>(prompt->size())}};
+        input["prompt"].data                  = const_cast<char*>(prompt->data());
+    }
 
     TensorDict output;
 
@@ -162,7 +167,7 @@ void run_single(IBrickV1& brick, const std::string& manifest_path, const std::st
 }
 
 void run_multiple(IBrickV1& brick, const std::string& runs_file) {
-    const auto run_configs = internal::load_run_configs(runs_file, {"i", "p", "o"}, {"i", "p"});
+    const auto run_configs = internal::load_run_configs(runs_file, {"i", "p", "o"}, {"i"});
     for (int64_t run_index = 0; run_index < static_cast<int64_t>(run_configs.size()); ++run_index) {
         const auto& config = run_configs[static_cast<size_t>(run_index)];
 
@@ -175,10 +180,15 @@ void run_multiple(IBrickV1& brick, const std::string& runs_file) {
             config.contains("o") ? std::make_optional(internal::get_run_value<std::string>(config, "o", "", run_index))
                                  : std::nullopt;
         const std::string input_path = internal::get_run_value<std::string>(config, "i", "", run_index);
-        const std::string prompt     = internal::get_run_value<std::string>(config, "p", "", run_index);
+        const std::optional<std::string> prompt =
+            config.contains("p") ? std::make_optional(internal::get_run_value<std::string>(config, "p", "", run_index))
+                                 : std::nullopt;
 
         COMPUTE_FLOW_CHECK(!input_path.empty());
-        COMPUTE_FLOW_CHECK(!prompt.empty());
+
+        if (prompt.has_value()) {
+            COMPUTE_FLOW_CHECK(!prompt->empty());
+        }
 
         if (output_path.has_value()) {
             COMPUTE_FLOW_CHECK(!output_path->empty());
@@ -204,10 +214,13 @@ void run_multiple(IBrickV1& brick, const std::string& runs_file) {
         TensorDict input;
 
         // Set the input
-        input.declare_tensor("image").format  = {DataType::F32, {k_num_channels, height, width}};
-        input["image"].data                   = image.data();
-        input.declare_tensor("prompt").format = {DataType::String, {static_cast<int64_t>(prompt.size())}};
-        input["prompt"].data                  = const_cast<char*>(prompt.data());
+        input.declare_tensor("image").format = {DataType::F32, {k_num_channels, height, width}};
+        input["image"].data                  = image.data();
+
+        if (prompt.has_value()) {
+            input.declare_tensor("prompt").format = {DataType::String, {static_cast<int64_t>(prompt->size())}};
+            input["prompt"].data                  = const_cast<char*>(prompt->data());
+        }
 
         TensorDict output;
 
@@ -266,12 +279,14 @@ int32_t run_cli(int32_t argc, char** argv) {
     std::string manifest_path;
     std::string input_path;
     std::string output_path;
-    std::string prompt;
+    std::optional<std::string> prompt;
     std::string json_file;
     std::string thread_spec  = "1";
     bool enable_op_profiling = false;
+    size_t num_ops_displayed = 5;
 
     static option long_options[] = {{"enable-op-profiling", no_argument, nullptr, 1001},
+                                    {"num-ops-displayed", required_argument, nullptr, 1002},
                                     {"help", no_argument, nullptr, 'h'},
                                     {nullptr, 0, nullptr, 0}};
 
@@ -299,6 +314,12 @@ int32_t run_cli(int32_t argc, char** argv) {
             case 1001:
                 enable_op_profiling = true;
                 break;
+            case 1002:
+                if (!internal::parse_num_ops_displayed(optarg, num_ops_displayed)) {
+                    std::cerr << "--num-ops-displayed must be a positive integer." << std::endl;
+                    return EXIT_FAILURE;
+                }
+                break;
             case 'h':
                 print_usage(argv[0]);
                 return EXIT_SUCCESS;
@@ -309,8 +330,9 @@ int32_t run_cli(int32_t argc, char** argv) {
     }
 
     // Check the mandatory arguments
-    if (manifest_path.empty() || (json_file.empty() && (input_path.empty() || prompt.empty())) ||
-        (!json_file.empty() && (!input_path.empty() || !prompt.empty() || !output_path.empty()))) {
+    if (manifest_path.empty() || (json_file.empty() && input_path.empty()) ||
+        (!json_file.empty() && (!input_path.empty() || prompt.has_value() || !output_path.empty())) ||
+        (prompt.has_value() && prompt->empty())) {
         std::fprintf(stderr, "Missing required arguments.\n\n");
         print_usage(argv[0]);
         return EXIT_FAILURE;
@@ -334,6 +356,7 @@ int32_t run_cli(int32_t argc, char** argv) {
     BrickOptions options;
     options.runtime.enable_warmup         = true;
     options.profiling.enable_op_profiling = enable_op_profiling;
+    options.profiling.num_ops_displayed   = num_ops_displayed;
 
     // Setup the brick
     brick->setup(manifest, options);

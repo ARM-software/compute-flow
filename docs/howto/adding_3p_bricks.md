@@ -6,9 +6,8 @@
 
 # How to add a 3rd party brick
 
-Run these commands from the Compute Flow project root. The Git repository of the 3rd party brick
-must have at least one tag. Each tagged release must contain a root `info.json` and the brick
-implementation files named by that metadata.
+Run these commands from the Compute Flow project root. A third-party Git repository can contain one
+or more bricks.
 
 ## Set up the Brick Manager
 
@@ -25,7 +24,8 @@ compute-flow registry add https://example.com/team/example-tts.git
 ```
 
 The command saves the URL in your local registry. It does not access the repository, discover
-versions, or install the brick or its models. Refresh the local cache to discover tagged releases:
+versions, or install bricks or models. Refresh the local cache to fetch all tags from every
+registered repository, including the official Arm® registry:
 
 ```bash
 compute-flow update
@@ -37,7 +37,7 @@ List configured sources to confirm the URL and its origin:
 compute-flow registry list
 ```
 
-Inspect the available versions:
+Inspect the available versions. A brick's versions are the tags whose registries contain it:
 
 ```bash
 compute-flow brick list --type=tts
@@ -45,6 +45,12 @@ compute-flow brick info tts:example-tts@1.0.0
 ```
 
 ## Install a version
+
+Omit `@version` to install the latest version of a brick:
+
+```bash
+compute-flow brick install tts:example-tts
+```
 
 Select a version, then inspect its declared models:
 
@@ -56,8 +62,10 @@ compute-flow model list tts:example-tts
 If the brick declares a model you need, install it with
 `compute-flow model install tts:example-tts <model-name>`.
 
-Run `compute-flow update` later to discover newly tagged versions. Updating the cache leaves the
-installed brick version unchanged; install a new version explicitly when you are ready to switch.
+Installation copies the selected brick from the tagged commit recorded by `update`. Run
+`compute-flow update` later to discover new registry tags. It reports newer versions of installed
+bricks and shows the command to install each update. Your installed brick version stays unchanged
+until you choose to install another version.
 
 To stop discovering versions from this repository, remove its source:
 

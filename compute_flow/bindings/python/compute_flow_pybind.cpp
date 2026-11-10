@@ -329,6 +329,7 @@ void bind_compute_flow_py(py::module_& m) {
         .def(py::init<>())
         .def_readwrite("enabled", &ProfilingOptions::enabled)
         .def_readwrite("enable_op_profiling", &ProfilingOptions::enable_op_profiling)
+        .def_readwrite("num_ops_displayed", &ProfilingOptions::num_ops_displayed)
         .def_readwrite("enable_timeline_annotations", &ProfilingOptions::enable_timeline_annotations)
         .def_readwrite("format", &ProfilingOptions::format)
         .def_readwrite("unit", &ProfilingOptions::unit);

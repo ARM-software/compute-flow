@@ -42,19 +42,20 @@ int32_t main(int32_t argc, char** argv) {
     COMPUTE_FLOW_CHECK(argc == 2);
 
     ModelData model;
+    const BrickInfo brick_info{"test", "SentencePiece", {1, 0}};
     model.model_name = "tokenizer";
     model.model_path = argv[1];
     model.set_input("tokens", 0).set_output("text", 0);
     auto decoder = make_runner(RunnerType::SentencePieceDecode);
 
-    decoder->setup(model);
+    decoder->setup(model, brick_info);
 
     ModelData encode_model;
     encode_model.model_path = argv[1];
     encode_model.set_input("text", 0).set_output("tokens", 0);
     auto encoder = make_runner(RunnerType::SentencePieceEncode);
 
-    encoder->setup(encode_model);
+    encoder->setup(encode_model, brick_info);
 
     std::string text = "Hello world.";
     TensorData input{{DataType::String, {static_cast<int64_t>(text.size())}}, text.data(), true};
@@ -89,7 +90,7 @@ int32_t main(int32_t argc, char** argv) {
 
     COMPUTE_FLOW_CHECK(decode_text(*decoder).empty());
 
-    decoder->setup(model);
+    decoder->setup(model, brick_info);
 
     COMPUTE_FLOW_CHECK(decode_text(*decoder).empty());
 }

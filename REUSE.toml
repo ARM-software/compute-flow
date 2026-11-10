@@ -27,9 +27,8 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
-# Brick registry.
 [[annotations]]
-path = "**/registry.txt"
+path = "tests/custom_ops/fixtures/*.tflite"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"

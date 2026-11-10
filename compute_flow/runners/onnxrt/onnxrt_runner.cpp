@@ -97,8 +97,7 @@ inline const char* OnnxTypeToString(ONNXTensorElementDataType type) {
 ONNXRTRunner::ONNXRTRunner() : _env(ORT_LOGGING_LEVEL_WARNING, "ONNXRTRunner"), _model(nullptr), _memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
 }
 
-void ONNXRTRunner::setup(const ModelData& model,
-                         ProfilerView profiler) {
+void ONNXRTRunner::setup(const ModelData& model, const BrickInfo&, ProfilerView profiler) {
 
     _model_name = model.model_name;
     _profiler   = profiler;

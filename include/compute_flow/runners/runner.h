@@ -27,7 +27,9 @@ class IRunner {
 public:
     virtual ~IRunner() = default;
 
+    /** Set up a model with the identity of its owning brick. */
     virtual void setup(const ModelData& model,
+                       const BrickInfo& brick_info,
                        ProfilerView profiler = {}) = 0;
 
     virtual const std::string& model_name() const = 0;
@@ -55,7 +57,9 @@ public:
     RunnerAdapter(RunnerAdapter&&) noexcept = default;
     RunnerAdapter& operator=(RunnerAdapter&&) noexcept = default;
 
-    void setup(const ModelData& model, ProfilerView profiler = {}) override { impl_.setup(model, profiler); }
+    void setup(const ModelData& model, const BrickInfo& brick_info, ProfilerView profiler = {}) override {
+        impl_.setup(model, brick_info, profiler);
+    }
     const std::string& model_name() const override { return impl_.model_name(); }
 
     void map_input(std::string_view key, size_t idx) override { impl_.map_input(key, idx); }

@@ -17,6 +17,7 @@ from brick_manager.errors import BrickManagerError
 
 _GIT_URL_SCHEMES = frozenset(("file", "git", "http", "https", "ssh"))
 _SCP_GIT_URL = re.compile(r"^[^/\\:@]+@[^/\\:]+:.+$")
+OFFICIAL_REGISTRY_URL = "https://github.com/ARM-software/compute-flow-bricks"
 
 
 def is_git_source(source: str) -> bool:
@@ -29,16 +30,6 @@ def is_git_source(source: str) -> bool:
     if parsed_source.scheme and len(parsed_source.scheme) != 1:
         raise BrickManagerError(f"Unsupported registry source URL: {source}")
     return False
-
-
-def default_registry_path() -> Path:
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "registry.txt"
-        if candidate.is_file() and (parent / "pyproject.toml").is_file():
-            return candidate
-    raise BrickManagerError(
-        "No default registry found. Run from a source checkout or pass --registry."
-    )
 
 
 def parse_registry(registry_path: Path) -> list[str]:
@@ -70,10 +61,14 @@ def parse_registry(registry_path: Path) -> list[str]:
 
 
 def registry_entries(
-    registry_path: Path, user_registry_path: Path | None = None
-) -> list[tuple[Path, str]]:
-    """Read packaged and optional user sources with their path origins."""
-    entries = [(registry_path, source) for source in parse_registry(registry_path)]
+    registry_path: Path | None, user_registry_path: Path | None = None
+) -> list[tuple[Path | None, str]]:
+    """Read a selected source list or the official and optional user sources."""
+    entries: list[tuple[Path | None, str]] = (
+        [(registry_path, source) for source in parse_registry(registry_path)]
+        if registry_path is not None
+        else [(None, OFFICIAL_REGISTRY_URL)]
+    )
     if user_registry_path is not None and user_registry_path.is_file():
         entries.extend(
             (user_registry_path, source)

@@ -1,0 +1,27 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef COMPUTE_FLOW_CUSTOM_OPS_V1_OUTPUT_SHAPES_H
+#define COMPUTE_FLOW_CUSTOM_OPS_V1_OUTPUT_SHAPES_H
+
+#include "compute_flow/custom_ops/v1/types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Fill output shapes from current input shapes; return zero on success. */
+int64_t CF_CALCULATE_OUTPUT_SHAPES(
+    const CF_TensorShape* input_shapes,
+    size_t num_inputs,
+    CF_TensorShape* output_shapes,
+    size_t num_outputs);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

@@ -24,11 +24,13 @@
 
 namespace compute_flow {
 
+struct BrickInfo;
+
 class MNNRunner {
 public:
     MNNRunner() = default;
 
-    void setup(const ModelData& model, ProfilerView profiler = {});
+    void setup(const ModelData& model, const BrickInfo&, ProfilerView profiler = {});
     const std::string& model_name() const;
 
     void map_input(std::string_view key, size_t idx);

@@ -23,10 +23,12 @@
 
 namespace compute_flow {
 
+struct BrickInfo;
+
 class HuggingFaceTokenizerRunner {
 public:
     HuggingFaceTokenizerRunner() = default;
-    void setup(const ModelData& model, ProfilerView profiler = {});
+    void setup(const ModelData& model, const BrickInfo&, ProfilerView profiler = {});
     const std::string& model_name() const;
     void map_input(std::string_view key, size_t idx);
     void map_input(std::string_view key, std::string_view tensor_name);

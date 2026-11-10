@@ -68,6 +68,7 @@ def run_single(
     manifest_path: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
     input_value: str,
     output_path: Path | None,
 ) -> None:
@@ -89,6 +90,7 @@ def run_single(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -132,6 +134,7 @@ def run_multiple(
     manifest_path: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
     runs_file: str,
 ) -> None:
     """Run monocular depth-estimation requests from a JSON file."""
@@ -152,6 +155,7 @@ def run_multiple(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -261,9 +265,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable per-operation profiling.",
     )
+    parser.add_argument(
+        "--num-ops-displayed",
+        type=int,
+        default=5,
+        metavar="<count>",
+        help="Maximum number of ops displayed per model when --enable-op-profiling is enabled (default: 5).",
+    )
     parser.add_argument("-h", "--help", action="help", help="Show this help message.")
 
     args = parser.parse_args(argv)
+
+    if args.num_ops_displayed <= 0:
+        parser.error("--num-ops-displayed must be a positive integer")
 
     # Check the mandatory arguments
     multiple_runs_mode = args.runs_file is not None
@@ -279,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.manifest_path,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
                 args.runs_file,
             )
         else:
@@ -286,6 +301,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.manifest_path,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
                 args.input_value,
                 args.output_path,
             )

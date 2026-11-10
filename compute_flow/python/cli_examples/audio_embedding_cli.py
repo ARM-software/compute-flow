@@ -57,6 +57,7 @@ def run_single(
     audio_path: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
 ) -> None:
     """Extract audio embeddings from one audio file."""
     # Parse the number of CPU threads to use
@@ -76,6 +77,7 @@ def run_single(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -112,6 +114,7 @@ def run_multiple(
     runs_file: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
 ) -> None:
     """Extract audio embeddings for each entry in a JSON runs file."""
     # Parse the number of CPU threads to use
@@ -131,6 +134,7 @@ def run_multiple(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -218,10 +222,20 @@ def main(argv: list[str] | None = None) -> int:
         help="Enable per-op profiling (default: off).",
     )
     parser.add_argument(
+        "--num-ops-displayed",
+        type=int,
+        default=5,
+        metavar="<count>",
+        help="Maximum number of ops displayed per model when --enable-op-profiling is enabled (default: 5).",
+    )
+    parser.add_argument(
         "-h", "--help", action="help", help="Show this help message and exit."
     )
 
     args = parser.parse_args(argv)
+
+    if args.num_ops_displayed <= 0:
+        parser.error("--num-ops-displayed must be a positive integer")
 
     multiple_runs_mode = args.runs_file is not None
     if (not multiple_runs_mode and args.audio_path is None) or (
@@ -236,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.runs_file,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
             )
         else:
             run_single(
@@ -243,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_path,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
             )
     except ValueError as error:
         parser.error(str(error))

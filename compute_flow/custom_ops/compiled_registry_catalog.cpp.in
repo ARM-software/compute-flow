@@ -1,0 +1,43 @@
+//
+// SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#include "compute_flow/custom_ops/registry.h"
+#include "compute_flow/manifest.h"
+
+#include <array>
+#include <string_view>
+
+@COMPUTE_FLOW_CUSTOM_OPS_CATALOG_INCLUDES@
+
+namespace compute_flow::custom_ops {
+
+namespace {
+
+struct CatalogEntry {
+    std::string_view type;
+    std::string_view name;
+    const Registry& (*get_registry)();
+};
+
+constexpr std::array<CatalogEntry, @COMPUTE_FLOW_CUSTOM_OPS_CATALOG_COUNT@> k_catalog{{
+@COMPUTE_FLOW_CUSTOM_OPS_CATALOG_ENTRIES@}};
+
+}  // namespace
+
+const Registry* find_compiled_registry(const BrickInfo& brick_info) {
+    const std::string_view type(brick_info.type);
+    const std::string_view name(brick_info.name);
+
+    for (const CatalogEntry& entry : k_catalog) {
+        if (entry.type == type && entry.name == name) {
+            return &entry.get_registry();
+        }
+    }
+
+    return nullptr;
+}
+
+}  // namespace compute_flow::custom_ops

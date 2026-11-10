@@ -55,7 +55,7 @@ std::shared_ptr<tokenizer::PreTrainedTokenizer> load_tokenizer(const std::string
 
 }  // namespace
 
-void HuggingFaceTokenizerRunner::setup(const ModelData& model, ProfilerView profiler) {
+void HuggingFaceTokenizerRunner::setup(const ModelData& model, const BrickInfo&, ProfilerView profiler) {
     _model_name = model.model_name;
     _profiler   = profiler;
 

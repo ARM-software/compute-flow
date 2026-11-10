@@ -16,6 +16,7 @@ from pathlib import Path
 
 from brick_manager.cache import write_cache
 from brick_manager.catalog import load_required_cache
+from brick_manager.custom_ops import remove_custom_ops
 from brick_manager.errors import BrickManagerError
 from brick_manager.identity import BrickSelector, parse_brick_selector
 from brick_manager.model_artifacts import remove_artifact
@@ -77,6 +78,7 @@ def uninstall_brick(
     metadata["installed_source_path"] = None
     metadata["installed_info_json"] = None
     _clear_installed_models(cache, selector)
+    remove_custom_ops(cache, selected)
     write_cache(state_paths.cache, cache)
     return UninstallResult(
         identity=selected.identity,

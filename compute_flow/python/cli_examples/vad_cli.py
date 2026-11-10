@@ -109,6 +109,7 @@ def run_single(
     audio_path: str | None,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
     record: bool,
     duration: float,
 ) -> None:
@@ -130,6 +131,7 @@ def run_single(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -163,6 +165,7 @@ def run_multiple(
     runs_file: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
 ) -> None:
     """Run VAD requests from a JSON file."""
     # Parse the number of CPU threads to use
@@ -182,6 +185,7 @@ def run_multiple(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -275,8 +279,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable per-op profiling (default: off)",
     )
+    parser.add_argument(
+        "--num-ops-displayed",
+        type=int,
+        default=5,
+        metavar="<count>",
+        help="Maximum number of ops displayed per model when --enable-op-profiling is enabled (default: 5).",
+    )
 
     args = parser.parse_args(argv)
+
+    if args.num_ops_displayed <= 0:
+        parser.error("--num-ops-displayed must be a positive integer")
 
     # Check the mandatory arguments
     multiple_runs_mode = args.runs_file is not None
@@ -292,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.runs_file,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
             )
         else:
             run_single(
@@ -299,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_path,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
                 args.record,
                 args.duration,
             )

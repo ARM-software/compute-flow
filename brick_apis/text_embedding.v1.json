@@ -1,0 +1,20 @@
+{
+    "name": "text_embedding.v1",
+    "description": "Converts one text string into an embedding vector.",
+    "inputs": {
+        "text": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "Text to embed."
+        }
+    },
+    "outputs": {
+        "embedding": {
+            "index": 0,
+            "dtype": "float32",
+            "shape": ["#embedding_size"],
+            "description": "Embedding vector with a model-dependent dimension and normalization."
+        }
+    }
+}

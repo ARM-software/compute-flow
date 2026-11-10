@@ -15,8 +15,9 @@ These usually live in separate repositories. For example, for the Qwen3-TTS bric
 
 - The [model package](https://huggingface.co/Arm/qwen3-tts-0-6b-custom-voice-mix-precision) is
   hosted on Hugging Face
-- [`bricks/tts/qwen3_tts/`](../../bricks/tts/qwen3_tts/) contains the C++ inference code in Compute
-  Flow
+- `tts/qwen3_tts/` in the
+  [`compute-flow-bricks` repository](https://github.com/ARM-software/compute-flow-bricks) contains
+  the C++ inference code
 
 A model package can also be hosted on ModelScope or another model repository, and inference code can
 be hosted in another Git repository, such as GitHub or GitLab.
@@ -103,18 +104,23 @@ contains at least a `.cpp` file, a `.h` file, and an `info.json` file.
 For an `ExampleDetector` variant, the brick source might look like this:
 
 ```text
-bricks/audio_detection/example_detector/
+<brick-repository>/audio_detection/example_detector/
   ExampleDetector.cpp
   ExampleDetector.h
   info.json
 ```
 
 An `internal/` subdirectory may contain additional source files. The Brick Manager generates build
-and binding files from this layout. If useful, create starter files with:
+and binding files from this layout. From the Compute Flow project root, create starter files in your
+brick repository with:
 
 ```bash
-python3 scripts/create_brick_template.py audio_detection ExampleDetector
+python3 scripts/create_brick_template.py audio_detection ExampleDetector \
+  --output-root /path/to/compute-flow-bricks
 ```
+
+Add `audio_detection/example_detector` to that repository's root `registry.txt`. See the
+[registry format](../design/brick_manager.md#brick-registry) for publishing tagged releases.
 
 Replace the generated placeholders, implement the inference code with the Compute Flow Runner API,
 and read model details from the manifest.
@@ -152,7 +158,7 @@ This workflow covers native builds. Android™ testing is not covered at this st
 Keep the test cases inside a `test/` folder in the brick, beside its implementation:
 
 ```text
-bricks/vad/silero/
+<brick-repository>/vad/silero/
   SileroVAD.cpp
   SileroVAD.h
   info.json

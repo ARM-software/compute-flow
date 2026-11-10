@@ -170,6 +170,11 @@ may still call `validate()` explicitly when they want to check manifest compatib
 `BrickBaseV1::setup()` converts validation failures into runtime errors before loading models.
 Validation must not be duplicated inside brick-specific model-loading code.
 
+When loading a model, a brick passes its manifest-level `BrickInfo` to the runner alongside that
+model's `ModelData`: `runner->setup(model, manifest.get_brick_info(), profiler)`. The runner can use
+the brick information for brick-specific tasks, such as retrieving custom operations required by the
+model.
+
 #### The `setup()` method
 
 The `setup()` method takes two inputs:
@@ -203,6 +208,8 @@ ______________________________________________________________________
 
 - Statistics and external timeline annotations can be enabled independently
 - Optional operation-level profiling
+- The pretty profile displays the five most costly operations per model by default;
+  `num_ops_displayed` controls how many are shown when operation-level profiling is enabled
 - Output formats: Pretty (human-readable) or CSV (machine-readable)
 
 ### `BrickBaseV1` methods

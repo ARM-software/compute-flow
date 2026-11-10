@@ -28,6 +28,58 @@ std::string format_percent(double pct) {
     return os.str();
 }
 
+std::vector<std::string> wrap_contributor_name(std::string_view name, std::size_t width) {
+    if (width == 0) {
+        return {std::string(name)};
+    }
+
+    const auto first_content = name.find_first_not_of(' ');
+    const std::size_t indent = first_content == std::string_view::npos ? 0 : std::min(first_content, width - 1);
+    std::vector<std::string> lines;
+
+    while (name.size() > width - (lines.empty() ? 0 : indent)) {
+        const std::size_t padding = lines.empty() ? 0 : indent;
+        const std::size_t available = width - padding;
+        const auto first_non_space = name.find_first_not_of(' ');
+        std::size_t space = std::string_view::npos;
+        std::size_t bracket_depth = 0;
+
+        // Keep bracketed annotations together when they fit on a continuation line.
+        for (std::size_t i = 0; i <= available; ++i) {
+            if (name[i] == '[') {
+                ++bracket_depth;
+            } else if (name[i] == ']' && bracket_depth > 0) {
+                --bracket_depth;
+            } else if (name[i] == ' ' && bracket_depth == 0) {
+                space = i;
+            }
+        }
+
+        const std::size_t length = space != std::string_view::npos && space > first_non_space ? space : available;
+
+        lines.emplace_back(padding, ' ');
+        lines.back().append(name.substr(0, length));
+        name.remove_prefix(length);
+        while (!name.empty() && name.front() == ' ') {
+            name.remove_prefix(1);
+        }
+    }
+
+    if (!name.empty() || lines.empty()) {
+        lines.emplace_back(lines.empty() ? 0 : indent, ' ');
+        lines.back().append(name);
+    }
+    return lines;
+}
+
+void write_name_continuations(std::ostringstream& os,
+                              const std::vector<std::string>& lines,
+                              std::size_t runner_width) {
+    for (std::size_t i = 1; i < lines.size(); ++i) {
+        os << std::string(runner_width, ' ') << lines[i] << '\n';
+    }
+}
+
 std::string csv_escape(std::string_view value) {
     bool needs_quotes = false;
     for (char c : value) {
@@ -91,6 +143,53 @@ std::string bar_for_percent(double pct, std::size_t bar_width, bool unicode_bars
     }
     bar += "]";
     return bar;
+}
+
+struct OpDisplayLabel {
+    std::string_view name;
+    std::string_view kernel;
+    std::string_view hw;
+};
+
+OpDisplayLabel op_display_label(std::string_view name) {
+    constexpr std::string_view k_kernel_prefix = " [kernel=";
+    constexpr std::string_view k_hw_prefix = "; hw=";
+    const auto kernel_pos = name.rfind(k_kernel_prefix);
+
+    if (kernel_pos == std::string_view::npos || kernel_pos == 0 || name.back() != ']') {
+        return {name, {}, {}};
+    }
+
+    const auto kernel_start = kernel_pos + k_kernel_prefix.size();
+    const auto hw_pos = name.find(k_hw_prefix, kernel_start);
+
+    if (hw_pos == std::string_view::npos || hw_pos == kernel_start) {
+        return {name, {}, {}};
+    }
+
+    const auto hw_start = hw_pos + k_hw_prefix.size();
+
+    if (hw_start >= name.size() - 1) {
+        return {name, {}, {}};
+    }
+
+    return {name.substr(0, kernel_pos),
+            name.substr(kernel_start, hw_pos - kernel_start),
+            name.substr(hw_start, name.size() - hw_start - 1)};
+}
+
+void write_custom_op_details(std::ostream& os,
+                             const OpDisplayLabel& label,
+                             std::size_t indent,
+                             bool unicode) {
+    if (label.kernel.empty()) {
+        return;
+    }
+
+    os << std::string(indent, ' ') << (unicode ? "└─ " : "`- ")
+       << "kernel: " << label.kernel << "\n";
+    os << std::string(indent, ' ') << (unicode ? "└─ " : "`- ")
+       << "hw: " << label.hw << "\n";
 }
 
 }  // namespace
@@ -600,6 +699,7 @@ std::string Profiler::report(std::size_t runner_width, std::size_t name_width) c
     std::ostringstream os;
     const auto sections = report_sections();
     const std::string unit = unit_suffix(_options.unit);
+    const bool unicode_details = supports_unicode_bars();
 
     for (std::size_t section_index = 0; section_index < sections.size(); ++section_index) {
         const auto& section = sections[section_index];
@@ -659,16 +759,19 @@ std::string Profiler::report(std::size_t runner_width, std::size_t name_width) c
             if (!is_summary_contributor(s, section.scope, prefer_subscopes)) continue;
             const double total = ns_to_unit(s.total_ns, _options.unit);
             const double avg   = total / static_cast<double>(s.count);
+            const auto name_lines = wrap_contributor_name(s.name, name_width);
 
             os << std::left
                << std::setw(static_cast<int>(runner_width)) << s.runner
-               << std::setw(static_cast<int>(name_width))   << s.name
+               << std::setw(static_cast<int>(name_width))   << name_lines.front()
                << std::right << std::setw(kCallsWidth) << s.count
                << std::setw(kTotalWidth) << fix(total)
                << std::setw(kMetricWidth) << fix(avg)
                << std::setw(kMetricWidth) << fix(ns_to_unit(s.min_ns, _options.unit))
                << std::setw(kMetricWidth) << fix(ns_to_unit(s.max_ns, _options.unit))
                << "\n";
+
+            write_name_continuations(os, name_lines, runner_width);
 
             std::vector<const Stats*> nested_stats;
             nested_stats.reserve(stats.size());
@@ -689,16 +792,21 @@ std::string Profiler::report(std::size_t runner_width, std::size_t name_width) c
                                              ? (100.0 * static_cast<double>(nested->total_ns) / static_cast<double>(s.total_ns))
                                              : 0.0;
                 const std::string nested_total_with_pct = fix(nested_total) + " (" + format_percent(pct_total) + " %)";
-                const std::string nested_name = "  " + nested->name;
+                const auto label = op_display_label(nested->name);
+                const auto name_lines = wrap_contributor_name("  " + std::string(label.name), name_width);
+
                 os << std::left
                    << std::setw(static_cast<int>(runner_width)) << "-- op"
-                   << std::setw(static_cast<int>(name_width))   << nested_name
+                   << std::setw(static_cast<int>(name_width))   << name_lines.front()
                    << std::right << std::setw(kCallsWidth) << nested->count
                    << std::setw(kTotalWidth) << nested_total_with_pct
                    << std::setw(kMetricWidth) << fix(nested_avg)
                    << std::setw(kMetricWidth) << fix(ns_to_unit(nested->min_ns, _options.unit))
                    << std::setw(kMetricWidth) << fix(ns_to_unit(nested->max_ns, _options.unit))
                    << "\n";
+
+                write_name_continuations(os, name_lines, runner_width);
+                write_custom_op_details(os, label, runner_width + 4, unicode_details);
             }
 
             const long long overhead_ns = std::max(0LL, s.total_ns - nested_sum_ns);
@@ -915,9 +1023,11 @@ std::string Profiler::report_visual(std::size_t runner_width,
             ? (100.0 * static_cast<double>(total_ns) / static_cast<double>(denominator_ns))
             : 0.0;
         const std::string pct_str = format_percent(pct) + "%";
+        const auto name_lines = wrap_contributor_name(name, name_width);
+
         os << std::left
            << std::setw(static_cast<int>(runner_width)) << runner
-           << std::setw(static_cast<int>(name_width))   << name
+           << std::setw(static_cast<int>(name_width))   << name_lines.front()
            << std::right << std::setw(kCallsWidth)      << calls
            << std::setw(kGapWidth)                       << ""
            << std::setw(kBarWidth)                       << bar_for_percent(pct, bar_width, unicode_bars)
@@ -927,6 +1037,8 @@ std::string Profiler::report_visual(std::size_t runner_width,
            << std::setw(kMetricWidth)                    << fix(ns_to_unit(min_ns, _options.unit), 2)
            << std::setw(kMetricWidth)                    << fix(ns_to_unit(max_ns, _options.unit), 2)
            << "\n";
+
+        write_name_continuations(os, name_lines, runner_width);
     };
 
     const auto write_empty_metric_row = [&](std::string_view runner,
@@ -1059,9 +1171,11 @@ std::string Profiler::report_visual(std::size_t runner_width,
         os << "Model + Op Breakdown\n";
         write_columns();
         for (const auto* model : profiled_model_rows) {
+            const auto name_lines = wrap_contributor_name(model->name, name_width);
+
             os << std::left
                << std::setw(static_cast<int>(runner_width)) << model->runner
-               << std::setw(static_cast<int>(name_width))   << model->name
+               << std::setw(static_cast<int>(name_width))   << name_lines.front()
                << std::right << std::setw(kCallsWidth)      << ""
                << std::setw(kGapWidth)                       << ""
                << std::setw(kBarWidth)                       << ""
@@ -1071,6 +1185,8 @@ std::string Profiler::report_visual(std::size_t runner_width,
                << std::setw(kMetricWidth)                    << ""
                << std::setw(kMetricWidth)                    << ""
                << "\n";
+
+            write_name_continuations(os, name_lines, runner_width);
 
             std::vector<const Stats*> nested;
             for (const auto& s : stats) {
@@ -1100,8 +1216,11 @@ std::string Profiler::report_visual(std::size_t runner_width,
             }
             for (std::size_t i = 0; i < n_top; ++i) {
                 const Stats* op = nested[i];
+                const auto label = op_display_label(op->name);
                 shown_ns += op->total_ns;
-                write_row("", "  " + op->name, op->count, op->total_ns, op->min_ns, op->max_ns, model->total_ns);
+
+                write_row("", "  " + std::string(label.name), op->count, op->total_ns, op->min_ns, op->max_ns, model->total_ns);
+                write_custom_op_details(os, label, runner_width + 4, unicode_bars);
             }
 
             write_empty_metric_row("", "  Extra Ops", std::max(0LL, nested_sum_ns - shown_ns), model->total_ns);
@@ -1218,7 +1337,7 @@ void Profiler::write(std::ostream& os) const {
 
     switch (_options.format) {
         case ProfilingFormat::Pretty:
-            os << report_visual(16, 50, 30, 5, _options.enable_op_profiling);
+            os << report_visual(16, 50, 30, _options.num_ops_displayed, _options.enable_op_profiling);
             break;
         case ProfilingFormat::Csv:
             os << report_csv();

@@ -87,13 +87,14 @@ each tensor definition should include:
 
 The fields have the following meaning:
 
-| Field         | Meaning                                                                   |
-| ------------- | ------------------------------------------------------------------------- |
-| `index`       | Tensor index in the public brick API.                                     |
-| `dtype`       | Tensor data type.                                                         |
-| `shape`       | Tensor shape using concrete, symbolic, or derived dimensions.             |
-| `description` | Human-readable description of the tensor.                                 |
-| `json_schema` | Optional JSON Schema for the decoded value of a UTF-8 JSON string tensor. |
+| Field         | Meaning                                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `index`       | Tensor index in the public brick API.                                                                               |
+| `dtype`       | Tensor data type.                                                                                                   |
+| `shape`       | Tensor shape using concrete, symbolic, or derived dimensions.                                                       |
+| `description` | Human-readable description of the tensor.                                                                           |
+| `json_schema` | Optional JSON Schema for the decoded value of a UTF-8 JSON string tensor.                                           |
+| `optional`    | Whether a caller may omit this tensor. Defaults to `false`. An omitted tensor has no key in the input `TensorDict`. |
 
 `json_schema` documents the expected value; Compute Flow does not validate it at runtime. For a
 string tensor, `shape` counts bytes, so `[-1]` represents variable-length JSON text.

@@ -26,10 +26,11 @@ public:
      * @brief Load a SentencePiece .model and clear any previous history and output.
      * @param model Exactly one named input and output, each mapped to index zero;
      * recurrent states are unsupported. Names come from the manifest.
+     * @param brick_info Identity of the brick that owns the model.
      * @param profiler Non-owning profiler view used to measure decode calls.
      * @throws std::runtime_error If the model cannot load or the mapping is invalid.
      */
-    void setup(const ModelData& model, ProfilerView profiler = {}) override;
+    void setup(const ModelData& model, const BrickInfo&, ProfilerView profiler = {}) override;
     /** @brief Return the name supplied at setup, used for profiling. */
     const std::string& model_name() const override;
     /** @brief Bind the sole input once; only index zero is accepted. */

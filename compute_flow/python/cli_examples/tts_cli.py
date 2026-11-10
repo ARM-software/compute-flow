@@ -68,6 +68,7 @@ def _tts_process(
     prompt: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
     output_file: str | None,
     audio_queue: Queue | None,
     stats_queue: Queue,
@@ -88,6 +89,7 @@ def _tts_process(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -234,6 +236,7 @@ def run_single(
     output_file: str | None,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
     playback: bool,
 ) -> int:
     manifest_path = get_manifest_path(manifest_path, "tts")
@@ -261,6 +264,7 @@ def run_single(
             prompt,
             thread_spec,
             enable_op_profiling,
+            num_ops_displayed,
             output_file,
             audio_queue,
             tts_stats_queue,
@@ -308,6 +312,7 @@ def run_multiple(
     runs_file: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
     playback: bool,
 ) -> int:
     if playback:
@@ -331,6 +336,7 @@ def run_multiple(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
     brick.setup(manifest, options)
 
     run_configs = load_run_configs(runs_file, {"p", "o"}, {"p"})
@@ -457,10 +463,20 @@ def main(argv=None) -> int:
         help="Enable per-op profiling (default: off)",
     )
     parser.add_argument(
+        "--num-ops-displayed",
+        type=int,
+        default=5,
+        metavar="<count>",
+        help="Maximum number of ops displayed per model when --enable-op-profiling is enabled (default: 5).",
+    )
+    parser.add_argument(
         "-h", "--help", action="help", help="Show this help message and exit"
     )
 
     args = parser.parse_args(argv)
+
+    if args.num_ops_displayed <= 0:
+        parser.error("--num-ops-displayed must be a positive integer")
 
     multiple_runs_mode = args.runs_file is not None
     if (not multiple_runs_mode and not args.prompt) or (
@@ -475,6 +491,7 @@ def main(argv=None) -> int:
                 args.runs_file,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
                 args.playback,
             )
         except ValueError as error:
@@ -486,6 +503,7 @@ def main(argv=None) -> int:
         args.output_file,
         args.thread_spec,
         args.enable_op_profiling,
+        args.num_ops_displayed,
         args.playback,
     )
 

@@ -399,6 +399,21 @@ It includes:
 Scope time is a container duration, so it is displayed separately. The performance summary
 reconciles back to that container duration by adding an `Overhead` row.
 
+Custom operation profiling names include a `c_op:` prefix when recorded. Labels with a
+` [kernel=<kernel>; hw=<hardware>]` suffix display the operation name and timing statistics on one
+row, followed by the kernel and hardware details on separate indented lines. For example:
+
+```text
+c_op:add_f32_f32_f32                 2 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0.27%    0.36   0.18   0.12   0.24
+  └─ kernel: arm/neon
+  └─ hw: arm_neon_fp16
+```
+
+This layout applies to both pretty report methods. Terminals without UTF-8 support use an ASCII
+branch marker. Operations without the custom operation suffix keep their existing layout. The full
+label remains the aggregation key, so different kernel or hardware selections retain separate timing
+rows. CSV output retains the full label, including the `c_op:` prefix, in the `name` column.
+
 ______________________________________________________________________
 
 ### CSV output

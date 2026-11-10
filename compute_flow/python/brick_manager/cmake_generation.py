@@ -12,6 +12,7 @@ from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
 
+from brick_manager.custom_ops.cmake_generation import render_custom_ops_cmake
 from brick_manager.dependencies import dependency_metadata
 from brick_manager.errors import BrickManagerError
 from brick_manager.identity import brick_manager_name
@@ -28,6 +29,7 @@ class GeneratedBrickCMake:
     alias_target: str
     brick_class: str
     pybind_module: str
+    reference_sources: dict[str, str]
 
 
 def render_brick_cmake(source_path: Path) -> GeneratedBrickCMake:
@@ -45,10 +47,14 @@ def render_brick_cmake(source_path: Path) -> GeneratedBrickCMake:
     deps = info_json.get("deps", [])
     pybind_module = f"{name}_py"
     pybind_source_name = f"{pybind_module}_generated.cpp"
+    reference_block, reference_sources = render_custom_ops_cmake(
+        source_path, info_json, project_name, core_target
+    )
 
     values = {
         "COPYRIGHT_YEAR": str(date.today().year),
         "PROJECT_NAME": project_name,
+        "PROJECT_LANGUAGES": "C CXX" if reference_sources else "CXX",
         "BRICK_SOURCE_DIR": source_path.as_posix(),
         "DEPENDENCY_FIND_BLOCKS": _dependency_find_blocks(deps),
         "CORE_TARGET": core_target,
@@ -59,6 +65,7 @@ def render_brick_cmake(source_path: Path) -> GeneratedBrickCMake:
         "DEPENDENCY_INCLUDE_BLOCKS": _dependency_include_blocks(deps, core_target),
         "DEPENDENCY_LINK_BLOCK": _dependency_link_block(deps, core_target),
         "PYBIND_BLOCK": _pybind_block(pybind_source_name, pybind_module, core_target),
+        "REFERENCE_BLOCK": reference_block,
     }
     cmake = _render_template(values)
     return GeneratedBrickCMake(
@@ -77,11 +84,17 @@ def render_brick_cmake(source_path: Path) -> GeneratedBrickCMake:
         alias_target=alias_target,
         brick_class=brick_class,
         pybind_module=pybind_module,
+        reference_sources=reference_sources,
     )
 
 
 def write_brick_cmake(source_path: Path, output_dir: Path) -> Path:
     generated = render_brick_cmake(source_path)
+    generated_dir = output_dir / "generated_custom_ops"
+    if generated.reference_sources and generated_dir.is_symlink():
+        raise BrickManagerError(
+            f"Generated source directory must not be a symlink: {generated_dir}"
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "CMakeLists.txt"
     output_path.write_text(generated.cmake, encoding="utf-8")
@@ -89,6 +102,10 @@ def write_brick_cmake(source_path: Path, output_dir: Path) -> Path:
         generated.pybind_source,
         encoding="utf-8",
     )
+    if generated.reference_sources:
+        generated_dir.mkdir(exist_ok=True)
+        for name, source in generated.reference_sources.items():
+            (generated_dir / name).write_text(source, encoding="utf-8")
     return output_path
 
 

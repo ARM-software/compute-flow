@@ -198,9 +198,8 @@ ExternalProject_Add(
         <INSTALL_DIR>/${CMAKE_INSTALL_LIBDIR}/libggml-base.a
         <INSTALL_DIR>/${CMAKE_INSTALL_LIBDIR}/libggml.a
         <INSTALL_DIR>/${CMAKE_INSTALL_LIBDIR}/libggml-cpu.a
-    # KleidiAI is marked EXCLUDE_FROM_ALL so we must explicitly build the target
-    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target kleidiai
-    COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
+    # llama.cpp embeds its selected KleidiAI kernels in ggml-cpu.
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
 )
 
 set(COMPUTE_FLOW_LLAMACPP_INSTALL_DIR "${llamacpp_install_dir}")

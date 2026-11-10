@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <nlohmann/json.hpp>
@@ -29,6 +30,11 @@ using JsonConfig = nlohmann::json;
  */
 std::vector<JsonConfig> load_run_configs(const std::string& path, std::initializer_list<const char*> allowed_arguments,
                                          std::initializer_list<const char*> required_arguments);
+
+/**
+ * @brief Parse a positive count of operations displayed when --enable-op-profiling is enabled.
+ */
+bool parse_num_ops_displayed(const char* text, size_t& num_ops_displayed);
 
 /**
  * @brief Get an argument value for one run.

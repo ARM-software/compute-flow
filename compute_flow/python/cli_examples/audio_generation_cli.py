@@ -60,6 +60,7 @@ def run_single(
     output_file: str | None,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
 ) -> None:
     # Parse the number of CPU threads to use
     default_threads, model_threads = parse_hint_cpu_threads(thread_spec)
@@ -77,6 +78,7 @@ def run_single(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -108,6 +110,7 @@ def run_multiple(
     runs_file: str,
     thread_spec: str,
     enable_op_profiling: bool,
+    num_ops_displayed: int,
 ) -> None:
     # Parse the number of CPU threads to use
     default_threads, model_threads = parse_hint_cpu_threads(thread_spec)
@@ -125,6 +128,7 @@ def run_multiple(
     options = cf.BrickOptions()
     options.runtime.enable_warmup = True
     options.profiling.enable_op_profiling = enable_op_profiling
+    options.profiling.num_ops_displayed = num_ops_displayed
 
     # Setup the brick
     brick.setup(manifest, options)
@@ -209,10 +213,20 @@ def main(argv: list[str] | None = None) -> int:
         help="Enable per-op profiling (default: off)",
     )
     parser.add_argument(
+        "--num-ops-displayed",
+        type=int,
+        default=5,
+        metavar="<count>",
+        help="Maximum number of ops displayed per model when --enable-op-profiling is enabled (default: 5).",
+    )
+    parser.add_argument(
         "-h", "--help", action="help", help="Show this help message and exit"
     )
 
     args = parser.parse_args(argv)
+
+    if args.num_ops_displayed <= 0:
+        parser.error("--num-ops-displayed must be a positive integer")
 
     # Check the mandatory arguments
     multiple_runs_mode = args.runs_file is not None
@@ -228,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.runs_file,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
             )
         else:
             run_single(
@@ -236,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.output_file,
                 args.thread_spec,
                 args.enable_op_profiling,
+                args.num_ops_displayed,
             )
     except ValueError as error:
         parser.error(str(error))

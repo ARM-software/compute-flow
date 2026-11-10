@@ -1,0 +1,43 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef COMPUTE_FLOW_CUSTOM_OPS_V1_INTERFACE_H
+#define COMPUTE_FLOW_CUSTOM_OPS_V1_INTERFACE_H
+
+#include "compute_flow/custom_ops/v1/types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Each of the four functions returns zero on success and a nonzero value on failure. */
+/* Report storage needed for data prepared during setup. */
+int64_t CF_GET_PERSISTENT_MEMORY_REQUIREMENT(
+    const CF_TensorFormatArray* src_formats,
+    CF_MemoryRequirement* requirements);
+
+/* Report scratch storage needed for the current input and output shapes. */
+int64_t CF_GET_SCRATCH_MEMORY_REQUIREMENT(
+    const CF_TensorFormatArray* src_formats,
+    const CF_TensorFormatArray* dst_formats,
+    CF_MemoryRequirement* requirements);
+
+/* Prepare reusable data in caller-owned persistent memory. */
+int64_t CF_SETUP(const CF_TensorArray* src_tensors, CF_Workspace* persistent_mem);
+
+/* Execute this worker's portion of the operator. */
+int64_t CF_RUN(
+    const CF_TensorArray* src_tensors,
+    CF_TensorArray* dst_tensors,
+    const CF_Workspace* persistent_mem,
+    CF_Workspace* scratch_mem,
+    const CF_ThreadInfo* thread_info);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

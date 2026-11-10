@@ -122,7 +122,7 @@ void @CLASS@::load_models_impl(const ComputeFlowManifest& manifest, ProfilerView
     // TODO: Create and set up a runner for each model module.
     // _runner = make_runner(manifest["model"].framework_type);
 
-    // _runner->setup(manifest["model"], profiler);
+    // _runner->setup(manifest["model"], manifest.get_brick_info(), profiler);
 }
 
 void @CLASS@::prepare_impl(const ComputeFlowManifest& manifest, ProfilerView profiler) {

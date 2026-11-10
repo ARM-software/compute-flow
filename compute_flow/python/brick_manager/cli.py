@@ -162,7 +162,7 @@ def _add_registry_parser(
     )
 
     add_parser = registry_subparsers.add_parser(
-        "add", help="Register a Git brick source"
+        "add", help="Register a Git repository containing registry.txt"
     )
     add_parser.add_argument("url", metavar="git-url")
 

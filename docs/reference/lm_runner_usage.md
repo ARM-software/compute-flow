@@ -20,7 +20,7 @@ using compute_flow::TensorData;
 using compute_flow::DataType;
 
 auto lm_runner = make_lm_runner(manifest["talker"].lm_runner_type);
-lm_runner->setup(manifest["talker"], &profiler);
+lm_runner->setup(manifest["talker"], manifest.get_brick_info());
 
 TensorData input{};
 input.data = tokens.data();
@@ -49,7 +49,7 @@ using compute_flow::TensorData;
 using compute_flow::DataType;
 
 auto lm_runner = make_lm_runner(manifest["talker"].lm_runner_type);
-lm_runner->setup(manifest["talker"], &profiler);
+lm_runner->setup(manifest["talker"], manifest.get_brick_info());
 
 TensorData input{};
 input.data = tokens.data();
