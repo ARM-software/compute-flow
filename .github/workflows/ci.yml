@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_NO_SYNC: "1"
+
+jobs:
+  pre-commit:
+    name: License checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Install check dependencies
+        run: uv sync --locked --only-group formatters
+      - name: Check licenses
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  formatters:
+    name: Formatters
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # The trademark checker compares HEAD with its parent.
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Install check dependencies
+        run: uv sync --locked --no-default-groups --group formatters
+      - name: Check formatting
+        run: bash scripts/format.sh --check
+      - name: Check trademarks
+        run: uv run python scripts/check_trademarks.py
+      - name: Test brick CLI script generation
+        run: uv run python tests/bricks/test_test_script.py
+
+  build:
+    name: Native build and tests
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      CC: clang-18
+      CXX: clang++-18
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      COMPUTE_FLOW_HOME: ${{ github.workspace }}/.compute-flow
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang-18 lld-18 ninja-build pkg-config python3-dev \
+            libsndfile1 libportaudio2
+      - name: Install Python dependencies
+        run: uv sync --locked --no-default-groups --group build --group bricks --group tests
+      - name: Install bricks
+        run: |
+          uv run compute-flow update
+          uv run compute-flow brick install --all
+          uv run compute-flow brick list
+      - name: Configure
+        run: |
+          uv run cmake -S . -B build \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/build/install"
+      - name: Require prebuilt dependencies
+        run: |
+          grep -qx 'COMPUTE_FLOW_USE_PREBUILT_DEPS:BOOL=ON' build/CMakeCache.txt
+          for dependency in PROTOBUF LITERT EXECUTORCH ONNXRUNTIME MNN SENTENCEPIECE; do
+            grep -qx "COMPUTE_FLOW_BUILD_${dependency}_FROM_SOURCE:BOOL=OFF" build/CMakeCache.txt
+          done
+      - name: Build
+        run: uv run cmake --build build --parallel 4
+      - name: Test
+        run: uv run ctest --test-dir build --output-on-failure
+      - name: Package SDK and install
+        run: |
+          uv run cmake --build build --target compute_flow_application_sdk --parallel 4
+          uv run cmake --install build
