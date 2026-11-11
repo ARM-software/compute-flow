@@ -60,12 +60,22 @@ jobs:
         run: uv run python tests/bricks/test_test_script.py
 
   build:
-    name: Native build and tests
+    name: Native build and tests (${{ matrix.name }})
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux ARM64, Clang
+            cc: clang-18
+            cxx: clang++-18
+          - name: Linux ARM64, GCC
+            cc: gcc
+            cxx: g++
     env:
-      CC: clang-18
-      CXX: clang++-18
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
       CMAKE_BUILD_PARALLEL_LEVEL: "4"
       COMPUTE_FLOW_HOME: ${{ github.workspace }}/.compute-flow
     steps:
