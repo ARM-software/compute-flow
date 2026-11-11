@@ -67,10 +67,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux ARM64, Clang
+          - name: Linux® ARM64, Clang
             cc: clang-18
             cxx: clang++-18
-          - name: Linux ARM64, GCC
+          - name: Linux® ARM64, GCC
             cc: gcc
             cxx: g++
     env:
