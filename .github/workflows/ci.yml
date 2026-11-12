@@ -149,11 +149,6 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential ninja-build pkg-config python3-dev libsndfile1 libportaudio2
       - name: Select Android™ NDK
         run: |
           ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
