@@ -189,3 +189,91 @@ jobs:
           mkdir -p artifacts
           find build_android_arm64 -type f -name '*_cli' -exec cp {} artifacts/ \;
           test -n "$(find artifacts -type f -name '*_cli' -print -quit)"
+
+  brick-manager-build-android:
+    name: Android™ ARM64 (Brick Manager, ${{ matrix.ndk_mode }} NDK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        ndk_mode: [managed, override]
+    env:
+      ANDROID_NDK_VERSION: "27.3.13750724"
+      ANDROID_NDK_MODE: ${{ matrix.ndk_mode }}
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      COMPUTE_FLOW_HOME: ${{ github.workspace }}/.compute-flow
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ninja-build pkg-config python3-dev libsndfile1 libportaudio2
+      - name: Select Android™ NDK
+        run: |
+          ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          if [ ! -f "$ndk/build/cmake/android.toolchain.cmake" ]; then
+            sdkmanager "ndk;$ANDROID_NDK_VERSION"
+          fi
+          echo "NDK=$ndk" >> "$GITHUB_ENV"
+      - name: Install Python dependencies
+        run: uv sync --locked --no-default-groups --group build --group bricks --group tests
+      - name: Install bricks
+        run: |
+          uv run compute-flow update
+          uv run compute-flow brick install --all
+          uv run compute-flow brick list
+      - name: Configure and check Brick Manager NDK
+        run: |
+          if [ "$ANDROID_NDK_MODE" = "override" ]; then
+            export COMPUTE_FLOW_ANDROID_NDK_ROOT="$NDK"
+          else
+            unset COMPUTE_FLOW_ANDROID_NDK_ROOT
+            mkdir -p "$COMPUTE_FLOW_HOME/toolchains"
+            # Match GitLab's preinstalled NDK in Brick Manager's managed slot.
+            ln -s "$NDK" "$COMPUTE_FLOW_HOME/toolchains/android-ndk-r27c"
+          fi
+          echo "COMPUTE_FLOW_ANDROID_NDK_ROOT=${COMPUTE_FLOW_ANDROID_NDK_ROOT:-}" >> "$GITHUB_ENV"
+
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from brick_manager.check import _android_ndk_check
+          from brick_manager.paths import resolve_state_paths
+
+          selection = _android_ndk_check(resolve_state_paths())
+          override = os.environ["ANDROID_NDK_MODE"] == "override"
+          expected_provider = "User" if override else "Brick Manager"
+          expected_path = (
+              Path(os.environ["NDK"])
+              if override
+              else Path(os.environ["COMPUTE_FLOW_HOME"])
+              / "toolchains"
+              / "android-ndk-r27c"
+          )
+          selected_path = Path(selection.path) if selection.path else None
+
+          if selection.provider != expected_provider or selected_path != expected_path:
+              raise SystemExit(
+                  f"Expected NDK from {expected_provider} at {expected_path}, "
+                  f"selected {selection.provider} at {selection.path}"
+              )
+
+          print(f"Selected NDK from {selection.provider} at {selection.path}")
+          PY
+      - name: Build with Brick Manager
+        run: uv run compute-flow build android_arm64 --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Require prebuilt dependencies
+        run: |
+          cache=build_android_arm64/CMakeCache.txt
+          grep -qx 'COMPUTE_FLOW_USE_PREBUILT_DEPS:BOOL=ON' "$cache"
+          for dependency in PROTOBUF LITERT EXECUTORCH ONNXRUNTIME MNN SENTENCEPIECE; do
+            grep -qx "COMPUTE_FLOW_BUILD_${dependency}_FROM_SOURCE:BOOL=OFF" "$cache"
+          done
