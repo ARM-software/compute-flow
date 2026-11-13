@@ -177,7 +177,7 @@ usage rules for names used throughout the project.
 
 ## License
 
-Compute Flow is licensed under the [Apache License 2.0](LICENSES/Apache-2.0.txt).
+Compute Flow is licensed under the [Apache License 2.0](LICENSE).
 
 Third-party components remain subject to their respective licenses. See
 [third-party notices](THIRD_PARTY_NOTICES.md) for the direct dependency inventory.
