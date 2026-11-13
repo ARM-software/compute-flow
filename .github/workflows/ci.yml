@@ -61,22 +61,31 @@ jobs:
 
   build:
     name: Native build and tests (${{ matrix.name }})
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Linux® ARM64, Clang
+            os: ubuntu-24.04-arm
             cc: clang-18
             cxx: clang++-18
+            parallel: 4
           - name: Linux® ARM64, GCC
+            os: ubuntu-24.04-arm
             cc: gcc
             cxx: g++
+            parallel: 4
+          - name: macOS® ARM64, AppleClang
+            os: macos-15
+            cc: /usr/bin/clang
+            cxx: /usr/bin/clang++
+            parallel: 3
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
-      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      CMAKE_BUILD_PARALLEL_LEVEL: ${{ matrix.parallel }}
       COMPUTE_FLOW_HOME: ${{ github.workspace }}/.compute-flow
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -85,12 +94,18 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
-      - name: Install system dependencies
+      - name: Install Linux® system dependencies
+        if: runner.os == 'Linux' # trademark-check: allow
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang-18 lld-18 ninja-build pkg-config python3-dev \
             libsndfile1 libportaudio2
+      - name: Install macOS® system dependencies
+        if: runner.os == 'macOS' # trademark-check: allow
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install ninja pkg-config libsndfile portaudio
       - name: Install Python dependencies
         run: uv sync --locked --no-default-groups --group build --group bricks --group tests
       - name: Install bricks
@@ -111,10 +126,10 @@ jobs:
             grep -qx "COMPUTE_FLOW_BUILD_${dependency}_FROM_SOURCE:BOOL=OFF" build/CMakeCache.txt
           done
       - name: Build
-        run: uv run cmake --build build --parallel 4
+        run: uv run cmake --build build --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
       - name: Test
         run: uv run ctest --test-dir build --output-on-failure
       - name: Package SDK and install
         run: |
-          uv run cmake --build build --target compute_flow_application_sdk --parallel 4
+          uv run cmake --build build --target compute_flow_application_sdk --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
           uv run cmake --install build
