@@ -133,3 +133,59 @@ jobs:
         run: |
           uv run cmake --build build --target compute_flow_application_sdk --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
           uv run cmake --install build
+
+  cmake-build-android:
+    name: Android™ ARM64 (CMake)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ANDROID_NDK_VERSION: "27.3.13750724"
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      COMPUTE_FLOW_HOME: ${{ github.workspace }}/.compute-flow
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Select Android™ NDK
+        run: |
+          ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          if [ ! -f "$ndk/build/cmake/android.toolchain.cmake" ]; then
+            sdkmanager "ndk;$ANDROID_NDK_VERSION"
+          fi
+          echo "NDK=$ndk" >> "$GITHUB_ENV"
+      - name: Install Python dependencies
+        run: uv sync --locked --no-default-groups --group build --group bricks --group tests
+      - name: Install bricks
+        run: |
+          uv run compute-flow update
+          uv run compute-flow brick install --all
+          uv run compute-flow brick list
+      - name: Configure with CMake
+        run: |
+          uv run cmake -S . -B build_android_arm64 \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/build_android_arm64/install"
+      - name: Require prebuilt dependencies
+        run: |
+          cache=build_android_arm64/CMakeCache.txt
+          grep -qx 'COMPUTE_FLOW_USE_PREBUILT_DEPS:BOOL=ON' "$cache"
+          for dependency in PROTOBUF LITERT EXECUTORCH ONNXRUNTIME MNN SENTENCEPIECE; do
+            grep -qx "COMPUTE_FLOW_BUILD_${dependency}_FROM_SOURCE:BOOL=OFF" "$cache"
+          done
+      - name: Build with CMake
+        run: uv run cmake --build build_android_arm64 --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Package SDK and install
+        run: |
+          uv run cmake --build build_android_arm64 --target compute_flow_application_sdk --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+          uv run cmake --install build_android_arm64
+      - name: Collect CLI binaries
+        run: |
+          mkdir -p artifacts
+          find build_android_arm64 -type f -name '*_cli' -exec cp {} artifacts/ \;
+          test -n "$(find artifacts -type f -name '*_cli' -print -quit)"
