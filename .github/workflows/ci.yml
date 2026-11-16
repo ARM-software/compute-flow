@@ -231,7 +231,6 @@ jobs:
           else
             unset COMPUTE_FLOW_ANDROID_NDK_ROOT
             mkdir -p "$COMPUTE_FLOW_HOME/toolchains"
-            # Match GitLab's preinstalled NDK in Brick Manager's managed slot.
             ln -s "$NDK" "$COMPUTE_FLOW_HOME/toolchains/android-ndk-r27c"
           fi
           echo "COMPUTE_FLOW_ANDROID_NDK_ROOT=${COMPUTE_FLOW_ANDROID_NDK_ROOT:-}" >> "$GITHUB_ENV"
