@@ -21,13 +21,32 @@ env:
 
 jobs:
   brick-tests:
-    name: Brick tests (Linux® ARM64, Clang)
-    runs-on: ubuntu-24.04-arm
+    name: Brick tests (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux® ARM64, Clang
+            os: ubuntu-24.04-arm
+            cc: clang-18
+            cxx: clang++-18
+            parallel: 4
+            build_dir: build
+            from_source: "OFF"
+          - name: macOS® ARM64, AppleClang
+            os: macos-15
+            cc: /usr/bin/clang
+            cxx: /usr/bin/clang++
+            parallel: 3
+            build_dir: build_native
+            from_source: "ON"
     env:
-      CC: clang-18
-      CXX: clang++-18
-      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      CMAKE_BUILD_PARALLEL_LEVEL: ${{ matrix.parallel }}
+      COMPUTE_FLOW_CI_BUILD_DIR: ${{ matrix.build_dir }}
       COMPUTE_FLOW_HOME: ${{ github.workspace }}/.compute-flow
       COMPUTE_FLOW_TEST_MODEL_HOME: /tmp/cf-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -38,11 +57,17 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Linux® system dependencies
+        if: runner.os == 'Linux' # trademark-check: allow
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang-18 lld-18 ninja-build pkg-config python3-dev \
             libsndfile1
+      - name: Install macOS® system dependencies
+        if: runner.os == 'macOS' # trademark-check: allow
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install ninja pkg-config libsndfile portaudio
       - name: Install Python dependencies
         run: uv sync --locked --no-default-groups --group build --group bricks --group tests
       - name: Install bricks
@@ -51,26 +76,31 @@ jobs:
           uv run compute-flow brick install --all
           uv run compute-flow brick list
           ln -s "$COMPUTE_FLOW_HOME" "$COMPUTE_FLOW_TEST_MODEL_HOME"
+      - name: Build from source with Brick Manager
+        if: matrix.from_source == 'ON'
+        run: uv run compute-flow build native --from-source --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
       # TODO: Build bricks with the Brick Manager using `compute-flow build native`.
       - name: Configure generated brick tests
         run: |
-          uv run cmake -S . -B build \
+          uv run cmake -S . -B "$COMPUTE_FLOW_CI_BUILD_DIR" \
             -DBUILD_TESTING=ON \
             -DCMAKE_BUILD_TYPE=Release
       # TODO: Check whether these prebuilt dependency assertions can be removed.
       - name: Require prebuilt dependencies
+        if: matrix.from_source == 'OFF'
         run: |
-          cache=build/CMakeCache.txt
+          cache="$COMPUTE_FLOW_CI_BUILD_DIR/CMakeCache.txt"
           grep -qx 'COMPUTE_FLOW_USE_PREBUILT_DEPS:BOOL=ON' "$cache"
           for dependency in PROTOBUF LITERT EXECUTORCH ONNXRUNTIME MNN SENTENCEPIECE; do
             grep -qx "COMPUTE_FLOW_BUILD_${dependency}_FROM_SOURCE:BOOL=OFF" "$cache"
           done
       - name: Build generated brick tests
-        run: uv run cmake --build build --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+        if: matrix.from_source == 'OFF'
+        run: uv run cmake --build "$COMPUTE_FLOW_CI_BUILD_DIR" --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
       - name: Run generated brick tests
         run: |
           set -euo pipefail
-          export PYTHONPATH="$GITHUB_WORKSPACE/build/python${PYTHONPATH:+:$PYTHONPATH}"
+          export PYTHONPATH="$GITHUB_WORKSPACE/$COMPUTE_FLOW_CI_BUILD_DIR/python${PYTHONPATH:+:$PYTHONPATH}"
           # TODO: Discover installed bricks with generated tests automatically.
           bricks=(
             vad:silero-vad
