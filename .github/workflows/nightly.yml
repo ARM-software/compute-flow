@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: '37 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_NO_SYNC: "1"
+
+jobs:
+  brick-tests:
+    name: Brick tests (Linux® ARM64, Clang)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    env:
+      CC: clang-18
+      CXX: clang++-18
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      COMPUTE_FLOW_HOME: ${{ github.workspace }}/.compute-flow
+      COMPUTE_FLOW_TEST_MODEL_HOME: /tmp/cf-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Install Linux® system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang-18 lld-18 ninja-build pkg-config python3-dev \
+            libsndfile1 libportaudio2
+      - name: Install Python dependencies
+        run: uv sync --locked --no-default-groups --group build --group bricks --group tests
+      - name: Install bricks
+        run: |
+          uv run compute-flow update
+          uv run compute-flow brick install --all
+          uv run compute-flow brick list
+          ln -s "$COMPUTE_FLOW_HOME" "$COMPUTE_FLOW_TEST_MODEL_HOME"
+      - name: Configure generated brick tests
+        run: |
+          uv run cmake -S . -B build \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_BUILD_TYPE=Release
+      - name: Require prebuilt dependencies
+        run: |
+          cache=build/CMakeCache.txt
+          grep -qx 'COMPUTE_FLOW_USE_PREBUILT_DEPS:BOOL=ON' "$cache"
+          for dependency in PROTOBUF LITERT EXECUTORCH ONNXRUNTIME MNN SENTENCEPIECE; do
+            grep -qx "COMPUTE_FLOW_BUILD_${dependency}_FROM_SOURCE:BOOL=OFF" "$cache"
+          done
+      - name: Build generated brick tests
+        run: uv run cmake --build build --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Run generated brick tests
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/build/python${PYTHONPATH:+:$PYTHONPATH}"
+          bricks=(
+            vad:silero-vad
+            audio_detection:perch
+            audio_tool_calling:neu-decide
+            audio_to_audio:ulunas
+            stt:moonshine
+            audio_detection:nemotron3-diarization
+            stt:parakeet-tdt
+            stt:nemotron-asr
+            lm_text:lm-text-generic
+            monocular_depth_estimation:depth-anything-v3
+            monocular_depth_estimation:zip-depth
+            object_detection:yolo
+            tts:qwen3-tts
+            # FLUX.2 Klein tests are disabled until the models are publicly available.
+            # image_generation:flux2-klein-generation
+            # Phonon is excluded until its models are public; this suite tests pocket-tts-en only.
+            tts:pocket-tts
+          )
+          for brick in "${bricks[@]}"; do
+            brick_path="$(uv run compute-flow brick path "$brick")"
+            echo "::group::Test $brick"
+            COMPUTE_FLOW_HOME="$COMPUTE_FLOW_TEST_MODEL_HOME" \
+              uv run bash "$brick_path/test/run_tests.sh"
+            echo "::endgroup::"
+          done
+      - name: Clean up the short model path
+        if: always()
+        run: |
+          if [ -L "$COMPUTE_FLOW_TEST_MODEL_HOME" ]; then
+            unlink "$COMPUTE_FLOW_TEST_MODEL_HOME"
+          fi
