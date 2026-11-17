@@ -151,6 +151,7 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
+      # TODO: Test a user-provided NDK via COMPUTE_FLOW_ANDROID_NDK_ROOT.
       - name: Select Android™ NDK
         run: |
           ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
@@ -165,6 +166,8 @@ jobs:
           uv run compute-flow update
           uv run compute-flow brick install --all
           uv run compute-flow brick list
+      # TODO: Check whether `compute-flow build android_arm64 --from-source` can
+      # replace the direct CMake configuration and build commands.
       - name: Configure with CMake
         run: |
           uv run cmake -S . -B build_android_arm64 \
