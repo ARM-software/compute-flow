@@ -99,36 +99,7 @@ jobs:
         if: matrix.from_source == 'OFF'
         run: uv run cmake --build "$COMPUTE_FLOW_CI_BUILD_DIR" --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
       - name: Run generated brick tests
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="$GITHUB_WORKSPACE/$COMPUTE_FLOW_CI_BUILD_DIR/python${PYTHONPATH:+:$PYTHONPATH}"
-          # TODO: Discover installed bricks with generated tests automatically.
-          bricks=(
-            vad:silero-vad
-            audio_detection:perch
-            audio_tool_calling:neu-decide
-            audio_to_audio:ulunas
-            stt:moonshine
-            audio_detection:nemotron3-diarization
-            stt:parakeet-tdt
-            stt:nemotron-asr
-            lm_text:lm-text-generic
-            monocular_depth_estimation:depth-anything-v3
-            monocular_depth_estimation:zip-depth
-            object_detection:yolo
-            tts:qwen3-tts
-            # TODO: Enable FLUX once its tests match the public model package;
-            # flux2_klein_generation_4step_manifest.json is currently missing.
-            # image_generation:flux2-klein-generation
-            tts:pocket-tts
-          )
-          for brick in "${bricks[@]}"; do
-            brick_path="$(uv run compute-flow brick path "$brick")"
-            echo "::group::Test $brick"
-            COMPUTE_FLOW_HOME="$COMPUTE_FLOW_TEST_MODEL_HOME" \
-              uv run bash "$brick_path/test/run_tests.sh"
-            echo "::endgroup::"
-          done
+        run: bash scripts/ci/run-brick-tests.sh
       - name: Clean up the short model path
         if: always()
         run: |
@@ -325,33 +296,7 @@ jobs:
           export PATH="$HOME/.uv/bin:$PATH"
           export UV_NO_SYNC=1 GITHUB_WORKSPACE="$PWD" COMPUTE_FLOW_CI_BUILD_DIR=build
           export COMPUTE_FLOW_HOME="$PWD/.compute-flow" COMPUTE_FLOW_TEST_MODEL_HOME=/tmp/cf-rpi5
-          export PYTHONPATH="$GITHUB_WORKSPACE/$COMPUTE_FLOW_CI_BUILD_DIR/python${PYTHONPATH:+:$PYTHONPATH}"
-          bricks=(
-            vad:silero-vad
-            audio_detection:perch
-            audio_tool_calling:neu-decide
-            audio_to_audio:ulunas
-            stt:moonshine
-            audio_detection:nemotron3-diarization
-            stt:parakeet-tdt
-            stt:nemotron-asr
-            lm_text:lm-text-generic
-            monocular_depth_estimation:depth-anything-v3
-            monocular_depth_estimation:zip-depth
-            object_detection:yolo
-            tts:qwen3-tts
-            # FLUX.2 Klein tests are disabled until the models are publicly available.
-            # image_generation:flux2-klein-generation
-            # Phonon is excluded until its models are public; this suite tests pocket-tts-en only.
-            tts:pocket-tts
-          )
-          for brick in "${bricks[@]}"; do
-            brick_path="$(uv run compute-flow brick path "$brick")"
-            echo "::group::Test $brick"
-            COMPUTE_FLOW_HOME="$COMPUTE_FLOW_TEST_MODEL_HOME" \
-              uv run bash "$brick_path/test/run_tests.sh"
-            echo "::endgroup::"
-          done
+          bash scripts/ci/run-brick-tests.sh
           GUEST
       - name: Stop the guest
         if: always()
