@@ -85,7 +85,6 @@ jobs:
             tts:qwen3-tts
             # FLUX.2 Klein tests are disabled until the models are publicly available.
             # image_generation:flux2-klein-generation
-            # Phonon is excluded until its models are public; this suite tests pocket-tts-en only.
             tts:pocket-tts
           )
           for brick in "${bricks[@]}"; do
