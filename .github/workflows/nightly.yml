@@ -42,7 +42,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang-18 lld-18 ninja-build pkg-config python3-dev \
-            libsndfile1 libportaudio2
+            libsndfile1
       - name: Install Python dependencies
         run: uv sync --locked --no-default-groups --group build --group bricks --group tests
       - name: Install bricks
