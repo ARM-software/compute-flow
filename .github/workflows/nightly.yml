@@ -194,3 +194,175 @@ jobs:
           mkdir -p artifacts
           find build_android_arm64 -type f -name '*_cli' -exec cp {} artifacts/ \;
           test -n "$(find artifacts -type f -name '*_cli' -print -quit)"
+
+  brick-tests-rpi5:
+    name: Brick tests (Raspberry Pi® 5 CPU, QEMU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-arm qemu-efi-aarch64 qemu-utils cloud-image-utils
+      - name: Prepare guest image
+        run: |
+          vm="$RUNNER_TEMP/rpi5"
+          mkdir -p "$vm"
+          cd "$vm"
+          image=noble-server-cloudimg-arm64.img
+          base=https://cloud-images.ubuntu.com/noble/current
+          curl --fail --location --retry 3 -O "$base/$image"
+          curl --fail --location --retry 3 -O "$base/SHA256SUMS"
+          grep " \*$image$" SHA256SUMS | sha256sum --check --strict
+          qemu-img resize "$image" 40G
+          cp /usr/share/AAVMF/AAVMF_VARS.fd vars.fd
+      - name: Configure guest access
+        run: |
+          vm="$RUNNER_TEMP/rpi5"
+          cd "$vm"
+          ssh-keygen -q -t ed25519 -N '' -f id_ed25519
+          cat > user-data <<EOF
+          #cloud-config
+          ssh_pwauth: false
+          ssh_authorized_keys:
+            - $(cat id_ed25519.pub)
+          EOF
+          echo 'instance-id: nightly-rpi5' > meta-data
+          cloud-localds seed.img user-data meta-data
+          cat > ssh_config <<EOF
+          Host rpi5
+            HostName 127.0.0.1
+            Port 2222
+            User ubuntu
+            IdentityFile $vm/id_ed25519
+            UserKnownHostsFile $vm/known_hosts
+            StrictHostKeyChecking accept-new
+            BatchMode yes
+            ConnectTimeout 5
+            ServerAliveInterval 30
+            ServerAliveCountMax 5
+          EOF
+      - name: Boot Cortex-A76 guest
+        run: |
+          vm="$RUNNER_TEMP/rpi5"
+          cd "$vm"
+          # Full-system TCG keeps /proc/cpuinfo and native compiler detection in the guest.
+          # QEMU has no Pi 5 board model: this covers its CPU ISA, not GPU or peripherals.
+          qemu-system-aarch64 \
+            -machine virt,gic-version=3 -accel tcg,thread=multi \
+            -cpu cortex-a76 -smp 4 -m 8192 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/AAVMF/AAVMF_CODE.fd \
+            -drive if=pflash,format=raw,file=vars.fd \
+            -drive if=virtio,format=qcow2,discard=unmap,file=noble-server-cloudimg-arm64.img \
+            -drive if=virtio,format=raw,readonly=on,file=seed.img \
+            -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -device virtio-net-pci,netdev=net0,romfile= \
+            -display none -monitor none -serial file:serial.log \
+            -daemonize -pidfile qemu.pid
+          pid="$(cat qemu.pid)"
+          : > ssh-error.log
+          status=0
+          timeout 600 bash -c '
+            until error="$(ssh -F "$1/ssh_config" rpi5 true 2>&1)"; do
+              printf "%s\n" "$error" > "$1/ssh-error.log"
+              if ! kill -0 "$2" 2>/dev/null; then
+                echo "::error::QEMU exited before the guest became reachable."
+                exit 1
+              fi
+              sleep 5
+            done
+          ' bash "$vm" "$pid" || status=$?
+          if [ "$status" -ne 0 ]; then
+            if [ "$status" -eq 124 ]; then
+              echo "::error::Timed out after 600 seconds waiting for guest SSH."
+            fi
+            cat ssh-error.log
+            exit "$status"
+          fi
+          ssh -F "$vm/ssh_config" rpi5 'cloud-init status --wait'
+      - name: Install guest dependencies
+        run: |
+          ssh -F "$RUNNER_TEMP/rpi5/ssh_config" rpi5 'bash -se' <<'GUEST'
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential clang-18 lld-18 ninja-build pkg-config python3-dev \
+            libsndfile1 libportaudio2 python3-venv git
+          python3 -m venv "$HOME/.uv"
+          "$HOME/.uv/bin/pip" install uv
+          GUEST
+      - name: Build generated brick tests in the guest
+        run: |
+          git archive HEAD | ssh -F "$RUNNER_TEMP/rpi5/ssh_config" rpi5 \
+            'mkdir -p compute-flow && tar -x -C compute-flow'
+          ssh -F "$RUNNER_TEMP/rpi5/ssh_config" rpi5 'bash -se' <<'GUEST'
+          set -euo pipefail
+          cd compute-flow
+          export PATH="$HOME/.uv/bin:$PATH"
+          export UV_NO_SYNC=1 CC=clang-18 CXX=clang++-18 CMAKE_BUILD_PARALLEL_LEVEL=4
+          export COMPUTE_FLOW_HOME="$PWD/.compute-flow"
+          uv sync --locked --no-default-groups --group build --group bricks --group tests
+          uv run compute-flow update
+          uv run compute-flow brick install --all
+          uv run compute-flow brick list
+          ln -s "$COMPUTE_FLOW_HOME" /tmp/cf-rpi5
+          uv run cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+          grep -qx 'COMPUTE_FLOW_USE_PREBUILT_DEPS:BOOL=ON' build/CMakeCache.txt
+          for dependency in PROTOBUF LITERT EXECUTORCH ONNXRUNTIME MNN SENTENCEPIECE; do
+            grep -qx "COMPUTE_FLOW_BUILD_${dependency}_FROM_SOURCE:BOOL=OFF" build/CMakeCache.txt
+          done
+          uv run cmake --build build --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+          GUEST
+      - name: Run generated brick tests in the guest
+        run: |
+          ssh -F "$RUNNER_TEMP/rpi5/ssh_config" rpi5 'bash -se' <<'GUEST'
+          set -euo pipefail
+          cd compute-flow
+          export PATH="$HOME/.uv/bin:$PATH"
+          export UV_NO_SYNC=1 GITHUB_WORKSPACE="$PWD" COMPUTE_FLOW_CI_BUILD_DIR=build
+          export COMPUTE_FLOW_HOME="$PWD/.compute-flow" COMPUTE_FLOW_TEST_MODEL_HOME=/tmp/cf-rpi5
+          export PYTHONPATH="$GITHUB_WORKSPACE/$COMPUTE_FLOW_CI_BUILD_DIR/python${PYTHONPATH:+:$PYTHONPATH}"
+          bricks=(
+            vad:silero-vad
+            audio_detection:perch
+            audio_tool_calling:neu-decide
+            audio_to_audio:ulunas
+            stt:moonshine
+            audio_detection:nemotron3-diarization
+            stt:parakeet-tdt
+            stt:nemotron-asr
+            lm_text:lm-text-generic
+            monocular_depth_estimation:depth-anything-v3
+            monocular_depth_estimation:zip-depth
+            object_detection:yolo
+            tts:qwen3-tts
+            # FLUX.2 Klein tests are disabled until the models are publicly available.
+            # image_generation:flux2-klein-generation
+            # Phonon is excluded until its models are public; this suite tests pocket-tts-en only.
+            tts:pocket-tts
+          )
+          for brick in "${bricks[@]}"; do
+            brick_path="$(uv run compute-flow brick path "$brick")"
+            echo "::group::Test $brick"
+            COMPUTE_FLOW_HOME="$COMPUTE_FLOW_TEST_MODEL_HOME" \
+              uv run bash "$brick_path/test/run_tests.sh"
+            echo "::endgroup::"
+          done
+          GUEST
+      - name: Stop the guest
+        if: always()
+        run: |
+          vm="$RUNNER_TEMP/rpi5"
+          if [ -f "$vm/serial.log" ]; then
+            tail -n 100 "$vm/serial.log"
+          fi
+          if [ -f "$vm/qemu.pid" ]; then
+            pid="$(cat "$vm/qemu.pid")"
+            if kill -0 "$pid" 2>/dev/null; then
+              kill "$pid"
+            fi
+          fi
