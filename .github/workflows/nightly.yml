@@ -67,7 +67,7 @@ jobs:
         if: runner.os == 'macOS' # trademark-check: allow
         env:
           HOMEBREW_NO_AUTO_UPDATE: "1"
-        run: brew install ninja pkg-config libsndfile portaudio
+        run: brew install ninja pkg-config
       - name: Install Python dependencies
         run: uv sync --locked --no-default-groups --group build --group bricks --group tests
       - name: Install bricks
