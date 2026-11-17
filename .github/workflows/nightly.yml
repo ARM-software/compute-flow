@@ -51,11 +51,13 @@ jobs:
           uv run compute-flow brick install --all
           uv run compute-flow brick list
           ln -s "$COMPUTE_FLOW_HOME" "$COMPUTE_FLOW_TEST_MODEL_HOME"
+      # TODO: Build bricks with the Brick Manager using `compute-flow build native`.
       - name: Configure generated brick tests
         run: |
           uv run cmake -S . -B build \
             -DBUILD_TESTING=ON \
             -DCMAKE_BUILD_TYPE=Release
+      # TODO: Check whether these prebuilt dependency assertions can be removed.
       - name: Require prebuilt dependencies
         run: |
           cache=build/CMakeCache.txt
@@ -69,6 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="$GITHUB_WORKSPACE/build/python${PYTHONPATH:+:$PYTHONPATH}"
+          # TODO: Discover installed bricks with generated tests automatically.
           bricks=(
             vad:silero-vad
             audio_detection:perch
@@ -83,7 +86,8 @@ jobs:
             monocular_depth_estimation:zip-depth
             object_detection:yolo
             tts:qwen3-tts
-            # FLUX.2 Klein tests are disabled until the models are publicly available.
+            # TODO: Enable FLUX once its tests match the public model package;
+            # flux2_klein_generation_4step_manifest.json is currently missing.
             # image_generation:flux2-klein-generation
             tts:pocket-tts
           )
