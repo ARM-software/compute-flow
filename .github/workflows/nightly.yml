@@ -79,7 +79,8 @@ jobs:
       - name: Build from source with Brick Manager
         if: matrix.from_source == 'ON'
         run: uv run compute-flow build native --from-source --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
-      # TODO: Build bricks with the Brick Manager using `compute-flow build native`.
+      # TODO: Check whether `compute-flow build native` can replace the direct CMake
+      # commands used to configure and build generated brick tests.
       - name: Configure generated brick tests
         run: |
           uv run cmake -S . -B "$COMPUTE_FLOW_CI_BUILD_DIR" \
