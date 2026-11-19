@@ -124,8 +124,10 @@ Keep the input tensors valid and unmodified until `is_generation_complete()` ret
 Repeated calls for the same generation must provide the same input values, but their storage
 addresses may change between calls.
 
-After `is_generation_complete()` returns `true`, the user must call `reset_states()` before starting
-a new session.
+When `is_generation_complete()` returns `true`, the current generation has finished and the
+application can provide new input to `run()`. For bricks that support continuing a session across
+generations, keep the same brick instance and preserve its state between generations. Call
+`reset_states()` before starting an independent session on that instance.
 
 `api()` returns the exact `info.json` `api` value implemented by the brick, such as `tts.v1`. The
 value identifies the public input/output tensor contract and is available immediately after

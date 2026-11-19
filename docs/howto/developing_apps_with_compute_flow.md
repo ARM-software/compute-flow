@@ -115,7 +115,21 @@ application will automatically support both current and future variants without 
 
 ### Keep Inputs Valid During Generation
 
-Keep the input tensors valid and unmodified until `is_generation_complete()` returns `true`.
+Keep the input tensors valid and unmodified until `is_generation_complete()` returns `true`. Each
+call to `run()` for that generation must supply the same input values. Once generation completes,
+you can supply new input.
+
+### Continue a conversation across turns
+
+With the `lm_text_generic` brick using the llama.cpp runner, each turn has its own generation:
+
+1. Pass `What is a KV cache?` as `text_prompt` and call `run()` with that prompt until
+   `is_generation_complete()` returns `true`.
+2. On the same brick instance, pass only the follow-up `How much memory does it use?` as
+   `text_prompt`. Call `run()` with that prompt until the second response completes. The runner
+   reuses its KV cache from the previous turn. Passing the full transcript would append the history
+   again.
+3. Call `reset_states()` before starting an independent conversation.
 
 ### Follow the Brick Interface Specification
 
