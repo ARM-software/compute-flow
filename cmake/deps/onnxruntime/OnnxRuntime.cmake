@@ -30,7 +30,7 @@ if(COMPUTE_FLOW_ENABLE_LITERT OR COMPUTE_FLOW_ENABLE_EXECUTORCH)
 endif()
 
 # ---- Source coordinates (change version/tag here) ----------------------------------------
-set(COMPUTE_FLOW_ONNXRUNTIME_GIT_REPO "https://github.com/microsoft/onnxruntime.git")
+set(COMPUTE_FLOW_ONNXRUNTIME_GIT_REPO "https://github.com/intel/onnxruntime.git")
 set(COMPUTE_FLOW_ONNXRUNTIME_GIT_TAG "e6e048e073fd9e787195d809a66904990d48b082")
 
 # ---- Try pre-installed (release / system) --------------------------------------------------
