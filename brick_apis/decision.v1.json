@@ -1,0 +1,75 @@
+{
+    "name": "decision.v1",
+    "description": "Evaluates decision questions over text and/or image inputs and returns structured answers with confidence scores.",
+    "inputs": {
+        "state_text": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "State text."
+        },
+        "state_image": {
+            "index": 1,
+            "dtype": "float32",
+            "shape": ["#num_channels", "#input_height", "#input_width"],
+            "description": "State RGB image in planar CHW format with values normalized to [0, 1]. Channels are ordered as Red, Green, then Blue.",
+            "optional": true
+        },
+        "questions": {
+            "index": 2,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "JSON array of decision questions.",
+            "json_schema": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["choice", "yes_no", "score"]
+                        },
+                        "instructions": {
+                            "type": "string"
+                        },
+                        "criteria": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": ["type", "instructions", "criteria"],
+                    "additionalProperties": false
+                }
+            }
+        }
+    },
+    "outputs": {
+        "answers": {
+            "index": 0,
+            "dtype": "string",
+            "shape": [-1],
+            "description": "JSON array of answers in question order.",
+            "json_schema": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "answer": {
+                            "type": "string"
+                        },
+                        "scores": {
+                            "type": "array",
+                            "items": {
+                                "type": "number"
+                            }
+                        }
+                    },
+                    "required": ["answer", "scores"],
+                    "additionalProperties": false
+                }
+            }
+        }
+    }
+}
