@@ -324,23 +324,18 @@ struct InterpreterOperatorProfile {
     std::vector<InterpreterOperatorSample> samples;
 };
 
-std::string interpreter_operator_name(const char* name, int64_t op_index, int64_t subgraph_index) {
-    return std::string(name ? name : "UNKNOWN") + " [" + std::to_string(subgraph_index) + ":" +
-        std::to_string(op_index) + "]";
-}
-
 void ignore_telemetry_event(TfLiteTelemetryProfilerStruct*, const char*, uint64_t) {}
 void ignore_telemetry_op_event(TfLiteTelemetryProfilerStruct*, const char*, int64_t, int64_t, uint64_t) {}
 void ignore_telemetry_settings(TfLiteTelemetryProfilerStruct*, const char*, const TfLiteTelemetrySettings*) {}
 
 uint32_t begin_interpreter_operator(TfLiteTelemetryProfilerStruct* profiler,
                                     const char* name,
-                                    int64_t op_index,
-                                    int64_t subgraph_index) {
+                                    int64_t,
+                                    int64_t) {
     auto& profile = *static_cast<InterpreterOperatorProfile*>(profiler->data);
-    std::string label = interpreter_operator_name(name, op_index, subgraph_index);
     std::lock_guard<std::mutex> lock(profile.mutex);
-    profile.active_events.push_back({std::move(label), std::chrono::steady_clock::now()});
+
+    profile.active_events.push_back({name ? name : "UNKNOWN", std::chrono::steady_clock::now()});
     return static_cast<uint32_t>(profile.active_events.size());
 }
 
@@ -360,12 +355,12 @@ void end_interpreter_operator(TfLiteTelemetryProfilerStruct* profiler, uint32_t 
 void record_interpreter_operator(TfLiteTelemetryProfilerStruct* profiler,
                                  const char* name,
                                  uint64_t elapsed_us,
-                                 int64_t op_index,
-                                 int64_t subgraph_index) {
+                                 int64_t,
+                                 int64_t) {
     auto& profile = *static_cast<InterpreterOperatorProfile*>(profiler->data);
-    std::string label = interpreter_operator_name(name, op_index, subgraph_index);
     std::lock_guard<std::mutex> lock(profile.mutex);
-    profile.samples.push_back({std::move(label), static_cast<long long>(elapsed_us) * 1'000});
+
+    profile.samples.push_back({name ? name : "UNKNOWN", static_cast<long long>(elapsed_us) * 1'000});
 }
 
 DataType convert_type(LiteRtElementType type) {
@@ -662,7 +657,14 @@ void LiteRTRunner::setup(const ModelData& model, const BrickInfo& brick_info, Pr
     const bool dynamic_output = has_dynamic_output_interpreter(model.model_path);
     const bool compiled_custom_op = dynamic_output && _custom_ops_registry != nullptr &&
         _custom_ops_registry->size() != 0 && model_has_custom_ops(model.model_path);
-    _execution_mode = dynamic_output && !compiled_custom_op
+    // The compiled-model profiler samples process memory and drops events after 2048 entries.
+    // CPU models without a custom-op registry can use our timing-only interpreter callbacks.
+    const bool profile_cpu = profiler.is_enabled() && profiler.is_per_op_profiling_enabled() &&
+        !model.acc_config.priorities.empty() &&
+        model.acc_config.priorities.front().type == AcceleratorType::Cpu &&
+        (_custom_ops_registry == nullptr || _custom_ops_registry->size() == 0);
+
+    _execution_mode = (dynamic_output && !compiled_custom_op) || profile_cpu
         ? ExecutionMode::Interpreter
         : ExecutionMode::CompiledModel;
     switch (_execution_mode) {
@@ -1107,12 +1109,10 @@ void LiteRTRunner::run_interpreter() {
     COMPUTE_FLOW_CHECK(TfLiteSignatureRunnerInvoke(_interpreter->signature_runner) == kTfLiteOk);
     if (_interpreter->profile_operators) {
         auto& profile = _interpreter->operator_profile;
-        std::vector<InterpreterOperatorSample> samples;
-        {
-            std::lock_guard<std::mutex> lock(profile.mutex);
-            samples.swap(profile.samples);
-        }
-        for (const auto& sample : samples) {
+        std::lock_guard<std::mutex> lock(profile.mutex);
+
+        // Retain the event buffer capacity for the next invocation.
+        for (const auto& sample : profile.samples) {
             _profiler.add_nested_sample("litert", _model_name, sample.name, sample.elapsed_ns);
         }
     }

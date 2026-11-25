@@ -140,6 +140,16 @@ use one type, such as `RMS_NORM[F32]`, while mixed-type operations show inputs a
 `GET_ROWS[Q2_0C,I32->F32]`. `MUL_MAT` also identifies `GEMV` or `GEMM`. These labels do not describe
 internal backend packing or the selected microkernel.
 
+When operation profiling is enabled, LiteRT CPU models without a custom-op registry use the
+interpreter API with XNNPACK and Compute Flow's timing callbacks. These callbacks retain all
+operator events and avoid the compiled-model profiler's process memory sampling and fixed
+event-buffer limit in LiteRT 2.1.6. Operator timings are grouped by name, matching the
+compiled-model report. This uses the existing LiteRT prebuilt without modifying the dependency.
+
+Enabling operation profiling changes the execution path for these CPU models. Use runs without
+operation profiling to measure normal inference performance. GPU execution and models with a
+custom-op registry keep the compiled-model path and its profiling limitations.
+
 The report treats these as:
 
 | Record type | Description                                   |
