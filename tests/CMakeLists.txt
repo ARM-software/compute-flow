@@ -5,6 +5,11 @@
 #
 
 set(COMPUTE_FLOW_TEST_SENTENCEPIECE_MODEL "" CACHE FILEPATH "Local tokenizer for decode runner contract tests")
+
+add_executable(wav_tests cli_examples/wav_tests.cpp "${CMAKE_SOURCE_DIR}/compute_flow/cli_examples/internal/wav.cpp")
+target_include_directories(wav_tests PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/include")
+add_test(NAME wav COMMAND wav_tests "${CMAKE_CURRENT_BINARY_DIR}/wav_test.wav")
+
 add_executable(custom_op_memory_manager_tests custom_ops/memory_manager_tests.cpp)
 target_link_libraries(custom_op_memory_manager_tests PRIVATE compute_flow::compute_flow)
 add_test(NAME custom_op_memory_manager COMMAND custom_op_memory_manager_tests)

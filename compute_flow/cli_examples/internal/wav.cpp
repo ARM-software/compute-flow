@@ -6,13 +6,14 @@
 
 #include "compute_flow/cli_examples/internal/wav.h"
 
-#include "compute_flow/compute_flow.h"
-
+#include <array>
 #include <cstdint>
 #include <fstream>
 #include <limits>
 #include <string>
 #include <vector>
+
+#include "compute_flow/check.h"
 
 namespace compute_flow::bricks::internal {
 namespace {
@@ -23,6 +24,14 @@ constexpr uint16_t k_wave_format_extensible = 0xFFFE;
 constexpr uint16_t k_float_bits_per_sample = 32;
 constexpr uint32_t k_format_chunk_size = 16;
 constexpr uint32_t k_wav_header_size = 44;
+
+constexpr uint32_t k_extensible_format_chunk_size = 40;
+
+// On-disk GUID bytes. Matching the full GUID prevents custom subformats from aliasing PCM or float.
+constexpr std::array<uint8_t, 16> k_pcm_subformat_guid        = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+                                                                 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71};
+constexpr std::array<uint8_t, 16> k_ieee_float_subformat_guid = {0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+                                                                 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71};
 
 template <typename T>
 void read_value(std::ifstream& input_stream, T& value) {
@@ -105,17 +114,44 @@ int64_t read_mono_wav(const std::string& path, std::vector<float>& audio) {
     read_value(input_stream, bits_per_sample);
     (void)byte_rate;
 
-    const bool is_float32 =
-        (audio_format == k_wave_format_ieee_float || audio_format == k_wave_format_extensible) &&
-        bits_per_sample == 32;
+    uint32_t format_bytes_read = k_format_chunk_size;
+    if (audio_format == k_wave_format_extensible) {
+        // The extensible tag identifies the header layout; SubFormat determines the sample encoding.
+        COMPUTE_FLOW_CHECK(format_chunk_size >= k_extensible_format_chunk_size);
+
+        uint16_t extension_size        = 0;
+        uint16_t valid_bits_per_sample = 0;
+        uint32_t channel_mask          = 0;
+        std::array<uint8_t, 16> subformat_guid{};
+
+        read_value(input_stream, extension_size);
+        // cbSize excludes its own two-byte field and must fit within the fmt chunk.
+        COMPUTE_FLOW_CHECK(extension_size >= 22);
+        COMPUTE_FLOW_CHECK(extension_size <= format_chunk_size - k_format_chunk_size - sizeof(extension_size));
+        read_value(input_stream, valid_bits_per_sample);
+        read_value(input_stream, channel_mask);
+        COMPUTE_FLOW_CHECK(input_stream.read(reinterpret_cast<char*>(subformat_guid.data()), subformat_guid.size()));
+        (void)channel_mask;
+
+        // Valid PCM bits are left-aligned in the container, so the existing scaling also handles
+        // fewer valid bits, such as 24-bit samples stored in a 32-bit container.
+        COMPUTE_FLOW_CHECK(valid_bits_per_sample <= bits_per_sample);
+        COMPUTE_FLOW_CHECK(subformat_guid == k_pcm_subformat_guid || subformat_guid == k_ieee_float_subformat_guid);
+        audio_format      = subformat_guid == k_pcm_subformat_guid ? k_wave_format_pcm : k_wave_format_ieee_float;
+        format_bytes_read = k_extensible_format_chunk_size;
+    }
+
+    const bool is_float32 = audio_format == k_wave_format_ieee_float && bits_per_sample == 32;
     const bool is_pcm16 = audio_format == k_wave_format_pcm && bits_per_sample == 16;
     const bool is_pcm32 = audio_format == k_wave_format_pcm && bits_per_sample == 32;
     COMPUTE_FLOW_CHECK(num_channels == 1);
     COMPUTE_FLOW_CHECK(is_float32 || is_pcm16 || is_pcm32);
     COMPUTE_FLOW_CHECK(block_align != 0);
 
-    if (format_chunk_size > k_format_chunk_size) {
-        input_stream.seekg(static_cast<std::streamoff>(format_chunk_size - k_format_chunk_size), std::ios::cur);
+    // Skip unread fmt bytes and the RIFF padding byte when the chunk size is odd.
+    const uint32_t remaining_format_size = format_chunk_size - format_bytes_read + (format_chunk_size & 1U);
+    if (remaining_format_size != 0) {
+        input_stream.seekg(static_cast<std::streamoff>(remaining_format_size), std::ios::cur);
         COMPUTE_FLOW_CHECK(input_stream);
     }
 
@@ -141,6 +177,8 @@ int64_t read_mono_wav(const std::string& path, std::vector<float>& audio) {
     const uint32_t num_samples = data_chunk_size / block_align;
     audio.resize(num_samples);
 
+    // All supported formats produce float32 samples in audio. PCM16 and PCM32 are scaled by
+    // 1/32768 and 1/2147483648, respectively; float32 input is copied without normalization or clipping.
     if (is_float32) {
         COMPUTE_FLOW_CHECK(input_stream.read(
             reinterpret_cast<char*>(audio.data()), static_cast<std::streamsize>(data_chunk_size)));
